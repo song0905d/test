@@ -1,161 +1,121 @@
+# 누적 점수 추가 버전
+
 import streamlit as st
-import time
 import random
-import copy
 
-# 페이지 설정
-st.set_page_config(page_title="자동 테트리스", layout="wide")
+# 로봇 방향 표시
+direction_symbols = ['↑', '→', '↓', '←']
+dx = [-1, 0, 1, 0]  # 위, 오른쪽, 아래, 왼쪽
+dy = [0, 1, 0, -1]
 
-# 보드 설정
-ROWS, COLS = 11, 14  # 세로 5줄 늘림, 가로 넓게 유지
-EMPTY = "⬛"
-BLOCKS = {
-    'O': [[1, 1], [1, 1]],
-    'I': [[1], [1], [1], [1]],
-    'L': [[1, 0], [1, 0], [1, 1]],
-    'Z': [[1, 1, 0], [0, 1, 1]]
-}
-BLOCK_EMOJI = "🟥"
+def create_map(level):
+    size = 8
+    grid = [['⬜' for _ in range(size)] for _ in range(size)]
 
-# 상태 초기화 함수
-def reset_game():
-    st.session_state.board = [[0 for _ in range(COLS)] for _ in range(ROWS)]
-    st.session_state.block_pos = [0, COLS // 2 - 1]
-    st.session_state.block_active = True
-    st.session_state.start_time = time.time()
-    st.session_state.last_move_time = time.time()
-    st.session_state.current_block = random.choice(list(BLOCKS.values()))
-    st.session_state.game_over = False
+    all_positions = [(i, j) for i in range(size) for j in range(size)]
+    start_pos = random.choice(all_positions)
+    all_positions.remove(start_pos)
+
+    goal_pos = random.choice(all_positions)
+    all_positions.remove(goal_pos)
+
+    obstacle_counts = {1: 5, 2: 10, 3: 15}
+    num_obstacles = obstacle_counts.get(level, 5)
+    obstacle_pos = random.sample(all_positions, num_obstacles)
+
+    start_dir = random.randint(0, 3) if level >= 2 else 0
+
+    grid[start_pos[0]][start_pos[1]] = direction_symbols[start_dir]
+    grid[goal_pos[0]][goal_pos[1]] = '🎯'
+    for ox, oy in obstacle_pos:
+        grid[ox][oy] = '🧱'
+
+    return grid, start_pos, start_dir, goal_pos, set(obstacle_pos)
+
+def render_grid(grid):
+    for row in grid:
+        st.markdown(''.join(row))
+
+def move_robot(grid, pos, direction, commands, goal_pos, obstacles, level):
+    x, y = pos
+    size = len(grid)
+    score = 0
+    for cmd in commands:
+        grid[x][y] = '⬜'
+
+        if cmd == '앞으로':
+            nx, ny = x + dx[direction], y + dy[direction]
+            if 0 <= nx < size and 0 <= ny < size:
+                if (nx, ny) in obstacles:
+                    score -= 2
+                else:
+                    x, y = nx, ny
+        elif cmd == '오른쪽 회전':
+            direction = (direction + 1) % 4
+        elif cmd == '왼쪽 회전':
+            direction = (direction - 1) % 4
+        elif cmd == '집기':
+            if (x, y) == goal_pos:
+                grid[x][y] = '✅'
+                level_score = {1: 5, 2: 10, 3: 20}
+                score += level_score.get(level, 5)
+                return grid, True, score
+
+        grid[x][y] = direction_symbols[direction]
+    return grid, False, score
+
+# 초기화
+st.title("🤖 로봇 명령어 퍼즐 게임 with 점수 시스템")
+level = st.selectbox("레벨을 선택하세요", [1, 2, 3], format_func=lambda x: f"Level {x}")
+
+if 'grid' not in st.session_state:
+    st.session_state.grid, st.session_state.pos, st.session_state.dir, st.session_state.goal, st.session_state.obstacles = create_map(level)
     st.session_state.score = 0
-    st.session_state.high_score = st.session_state.get('high_score', 0)
-    st.session_state.drop_timer = time.time()
+    st.session_state.max_score = 0
+    st.session_state.total_score = 0
 
-# 초기 실행 시 상태 설정
-if 'board' not in st.session_state:
-    reset_game()
+# 점수 표시
+st.markdown(f"### 🧮 현재 점수: {st.session_state.score}")
+st.markdown(f"### 🏆 최고 점수: {st.session_state.max_score}")
+st.markdown(f"### 📊 누적 점수: {st.session_state.total_score}")
 
-# 블록 회전 함수
-def rotate_block(block):
-    return [list(row) for row in zip(*block[::-1])]
+# 맵 출력
+render_grid(st.session_state.grid)
 
-# 블록 놓기 함수
-def place_block():
-    for i in range(len(st.session_state.current_block)):
-        for j in range(len(st.session_state.current_block[0])):
-            if st.session_state.current_block[i][j]:
-                r = st.session_state.block_pos[0] + i
-                c = st.session_state.block_pos[1] + j
-                if 0 <= r < ROWS and 0 <= c < COLS:
-                    st.session_state.board[r][c] = 1
+# 명령어 입력
+commands_input = st.text_area("명령어를 줄 단위로 입력하세요 (예: 앞으로, 오른쪽 회전, 왼쪽 회전, 집기)", height=150)
+commands = [line.strip() for line in commands_input.strip().split('\n') if line.strip()]
 
-# 블록 충돌 검사
+# 실행 버튼
+if st.button("명령어 실행"):
+    st.session_state.grid, success, delta_score = move_robot(
+        st.session_state.grid,
+        st.session_state.pos,
+        st.session_state.dir,
+        commands,
+        st.session_state.goal,
+        st.session_state.obstacles,
+        level
+    )
+    st.session_state.score += delta_score
+    st.session_state.total_score += delta_score
+    if st.session_state.score > st.session_state.max_score:
+        st.session_state.max_score = st.session_state.score
 
-def check_collision(dr, dc, block=None):
-    block = block or st.session_state.current_block
-    for i in range(len(block)):
-        for j in range(len(block[0])):
-            if block[i][j]:
-                r = st.session_state.block_pos[0] + i + dr
-                c = st.session_state.block_pos[1] + j + dc
-                if r >= ROWS or c < 0 or c >= COLS:
-                    return True
-                if r >= 0 and st.session_state.board[r][c]:
-                    return True
-    return False
+    # 점수 재출력
+    st.markdown(f"### 🧮 현재 점수: {st.session_state.score}")
+    st.markdown(f"### 🏆 최고 점수: {st.session_state.max_score}")
+    st.markdown(f"### 📊 누적 점수: {st.session_state.total_score}")
+    render_grid(st.session_state.grid)
 
-# 블록 이동 (하강은 자동으로만 수행)
-def move_block(dr, dc, force=False):
-    if dr == 1 and not force:
-        return  # 수동 하강 금지
-    if not check_collision(dr, dc):
-        st.session_state.block_pos[0] += dr
-        st.session_state.block_pos[1] += dc
-    elif dr == 1:
-        place_block()
-        st.session_state.block_active = False
-
-# 블록 회전 적용
-
-def rotate_current_block():
-    rotated = rotate_block(st.session_state.current_block)
-    if not check_collision(0, 0, rotated):
-        st.session_state.current_block = rotated
-
-# 줄 삭제 및 점수 처리
-
-def clear_lines():
-    new_board = [row for row in st.session_state.board if not all(cell == 1 for cell in row)]
-    cleared = ROWS - len(new_board)
-    for _ in range(cleared):
-        new_board.insert(0, [0] * COLS)
-    st.session_state.board = new_board
-    st.session_state.score += cleared * 100
-    if st.session_state.score > st.session_state.high_score:
-        st.session_state.high_score = st.session_state.score
-    if cleared > 0:
-        st.audio("https://www.soundjay.com/button/beep-07.wav", autoplay=True)
-
-# 새 블록 생성 및 게임 오버 확인
-
-def spawn_new_block():
-    st.session_state.current_block = copy.deepcopy(random.choice(list(BLOCKS.values())))
-    st.session_state.block_pos = [0, COLS // 2 - 1]
-    st.session_state.block_active = True
-    st.session_state.last_move_time = time.time()
-    if check_collision(0, 0):
-        st.session_state.game_over = True
-        st.audio("https://www.soundjay.com/button/beep-10.wav", autoplay=True)
-
-# 보드 표시용 복사본
-
-def get_display_board():
-    display = [row[:] for row in st.session_state.board]
-    if st.session_state.block_active:
-        for i in range(len(st.session_state.current_block)):
-            for j in range(len(st.session_state.current_block[0])):
-                if st.session_state.current_block[i][j]:
-                    r = st.session_state.block_pos[0] + i
-                    c = st.session_state.block_pos[1] + j
-                    if 0 <= r < ROWS and 0 <= c < COLS:
-                        display[r][c] = 1
-    return display
-
-# UI 출력
-st.title("🧱 테트리스 (자동 하강 + 사운드)")
-
-# 자동 하강 타이밍 처리
-now = time.time()
-interval = 1.0
-if not st.session_state.game_over and now - st.session_state.drop_timer >= interval:
-    if st.session_state.block_active:
-        move_block(1, 0, force=True)
+    if success:
+        st.success("🎉 목표 지점에 도달했습니다!")
     else:
-        clear_lines()
-        spawn_new_block()
-    st.session_state.drop_timer = now
+        st.info("아직 목표에 도달하지 못했습니다.")
 
-if st.session_state.game_over:
-    st.error(f"💀 게임 오버! 최종 점수: {st.session_state.score}")
-    if st.button("🔁 다시 시작"):
-        reset_game()
-        st.experimental_rerun()
-else:
-    st.write(f"🏆 점수: {st.session_state.score} | 📈 최고 점수: {st.session_state.high_score}")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        if st.button("⬅️"):
-            move_block(0, -1)
-            st.experimental_rerun()
-    with col2:
-        if st.button("⟳ 회전"):
-            rotate_current_block()
-            st.experimental_rerun()
-    with col3:
-        if st.button("➡️"):
-            move_block(0, 1)
-            st.experimental_rerun()
+# 다시 시작 버튼
+if st.button("🔁 다시 시작"):
+    st.session_state.grid, st.session_state.pos, st.session_state.dir, st.session_state.goal, st.session_state.obstacles = create_map(level)
+    st.session_state.score = 0
+    st.experimental_rerun()
 
-# 보드 출력
-board_display = get_display_board()
-for row in board_display:
-    st.markdown("".join([BLOCK_EMOJI if cell else EMPTY for cell in row]))
