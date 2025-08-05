@@ -22,7 +22,7 @@ if 'mole_duration' not in st.session_state:
     st.session_state.mole_duration = 1.1
 
 # 설정
-GRID_SIZE = 3
+GRID_SIZE = 6
 GAME_DURATION = 45  # 게임 시간 (초)
 START_DURATION = 1.1  # 시작 노출 시간
 MIN_DURATION = 0.3    # 최소 노출 시간
@@ -80,14 +80,17 @@ if st.session_state.start_time:
         if time.time() - st.session_state.last_mole_time >= st.session_state.mole_duration:
             set_random_mole()
 
-        cols = st.columns(GRID_SIZE)
         for row in range(GRID_SIZE):
-            with cols[row]:
-                for col in range(GRID_SIZE):
-                    key = f"{row}-{col}-{st.session_state.mole_position}"
+            cols = st.columns([1]*GRID_SIZE + [0.2])  # 간격 넓힘
+            for col in range(GRID_SIZE):
+                key = f"{row}-{col}-{st.session_state.mole_position}"
+                with cols[col]:
                     if (row, col) == st.session_state.mole_position:
                         if st.button("🐹", key=key):
                             hit_mole(row, col)
+                    else:
+                        st.button("", key=key, disabled=True)
+
                     else:
                         st.button("", key=key, disabled=True)
 
