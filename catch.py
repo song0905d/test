@@ -81,7 +81,7 @@ if st.session_state.start_time:
             set_random_mole()
 
         for row in range(GRID_SIZE):
-            cols = st.columns([1]*GRID_SIZE + [0.2])  # 간격 넓힘
+            cols = st.columns(GRID_SIZE)
             for col in range(GRID_SIZE):
                 key = f"{row}-{col}-{st.session_state.mole_position}"
                 with cols[col]:
@@ -90,7 +90,3 @@ if st.session_state.start_time:
                             hit_mole(row, col)
                     else:
                         st.button("", key=key, disabled=True)
-
-                    else:
-                        st.button("", key=key, disabled=True)
-
