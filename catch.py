@@ -3,10 +3,10 @@ import time
 import random
 
 # 페이지 설정
-st.set_page_config(page_title="턴제 테트리스", layout="centered")
+st.set_page_config(page_title="자동 테트리스", layout="centered")
 
 # 보드 설정
-ROWS, COLS = 20, 10
+ROWS, COLS = 20, 5
 EMPTY = "⬛"
 BLOCK = "🟥"
 
@@ -21,6 +21,8 @@ if 'block_pos' not in st.session_state:
     st.session_state.block_pos = [0, COLS // 2 - 1]  # 시작 위치
 if 'block_active' not in st.session_state:
     st.session_state.block_active = True
+if 'last_move_time' not in st.session_state:
+    st.session_state.last_move_time = time.time()
 
 # 블록 놓기 함수
 def place_block():
@@ -80,27 +82,29 @@ def get_display_board():
                         display[r][c] = 1
     return display
 
-# UI
-st.title("🧱 턴제 테트리스 (간단 버전)")
+# 자동으로 아래로 이동
+current_time = time.time()
+if st.session_state.block_active and current_time - st.session_state.last_move_time > 0.5:
+    move_block(1, 0)
+    st.session_state.last_move_time = current_time
+elif not st.session_state.block_active:
+    clear_lines()
+    st.session_state.block_pos = [0, COLS // 2 - 1]
+    st.session_state.block_active = True
+    st.session_state.last_move_time = current_time
 
-col1, col2, col3, col4 = st.columns(4)
+# UI
+st.title("🧱 자동 테트리스 (좌우 이동만 가능)")
+
+col1, col2 = st.columns(2)
 with col1:
     if st.button("⬅️"):
         move_block(0, -1)
 with col2:
-    if st.button("⬇️"):
-        move_block(1, 0)
-with col3:
     if st.button("➡️"):
         move_block(0, 1)
-with col4:
-    if st.button("🔄 새 블록"):
-        clear_lines()
-        st.session_state.block_pos = [0, COLS // 2 - 1]
-        st.session_state.block_active = True
 
 # 보드 출력
 board_display = get_display_board()
 for row in board_display:
     st.markdown("".join([BLOCK if cell else EMPTY for cell in row]))
-
