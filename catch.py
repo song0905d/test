@@ -162,4 +162,3 @@ else:
 board_display = get_display_board()
 for row in board_display:
     st.markdown("".join([BLOCK_EMOJI if cell else EMPTY for cell in row]))
-
