@@ -2,10 +2,6 @@ import streamlit as st
 import time
 import random
 import copy
-from streamlit_autorefresh import st_autorefresh
-
-# 자동 새로고침: 매 1000ms = 1초
-st_autorefresh(interval=1000, key="auto_refresh")
 
 # 페이지 설정
 st.set_page_config(page_title="자동 테트리스", layout="wide")
@@ -31,13 +27,12 @@ def reset_game():
     st.session_state.current_block = random.choice(list(BLOCKS.values()))
     st.session_state.game_over = False
     st.session_state.score = 0
-    st.session_state.tick = time.time() - 2
+    st.session_state.high_score = st.session_state.get('high_score', 0)
+    st.session_state.drop_timer = time.time()
 
 # 초기 실행 시 상태 설정
 if 'board' not in st.session_state:
     reset_game()
-if 'high_score' not in st.session_state:
-    st.session_state.high_score = 0
 
 # 블록 회전 함수
 def rotate_block(block):
@@ -125,39 +120,43 @@ def get_display_board():
                         display[r][c] = 1
     return display
 
-# 자동 하강 처리 (1초마다)
-current_time = time.time()
-if not st.session_state.game_over:
-    if current_time - st.session_state.tick > 1.0:
-        if st.session_state.block_active:
-            move_block(1, 0, force=True)
-        else:
-            clear_lines()
-            spawn_new_block()
-        st.session_state.tick = current_time
-
 # UI 출력
-st.title("🧱 자동 테트리스 with 사운드")
+st.title("🧱 테트리스 (자동 하강 + 사운드)")
+
+# 자동 하강 타이밍 처리
+now = time.time()
+interval = 1.0
+if not st.session_state.game_over and now - st.session_state.drop_timer >= interval:
+    if st.session_state.block_active:
+        move_block(1, 0, force=True)
+    else:
+        clear_lines()
+        spawn_new_block()
+    st.session_state.drop_timer = now
+    st.experimental_rerun()
 
 if st.session_state.game_over:
     st.error(f"💀 게임 오버! 최종 점수: {st.session_state.score}")
     if st.button("🔁 다시 시작"):
         reset_game()
+        st.experimental_rerun()
 else:
     st.write(f"🏆 점수: {st.session_state.score} | 📈 최고 점수: {st.session_state.high_score}")
     col1, col2, col3 = st.columns(3)
     with col1:
         if st.button("⬅️"):
             move_block(0, -1)
+            st.experimental_rerun()
     with col2:
         if st.button("⟳ 회전"):
             rotate_current_block()
+            st.experimental_rerun()
     with col3:
         if st.button("➡️"):
             move_block(0, 1)
+            st.experimental_rerun()
 
 # 보드 출력
 board_display = get_display_board()
 for row in board_display:
     st.markdown("".join([BLOCK_EMOJI if cell else EMPTY for cell in row]))
-
