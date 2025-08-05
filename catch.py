@@ -21,6 +21,8 @@ if 'block_pos' not in st.session_state:
     st.session_state.block_pos = [0, COLS // 2 - 1]  # 시작 위치
 if 'block_active' not in st.session_state:
     st.session_state.block_active = True
+if 'start_time' not in st.session_state:
+    st.session_state.start_time = time.time()
 if 'last_move_time' not in st.session_state:
     st.session_state.last_move_time = time.time()
 
@@ -84,7 +86,11 @@ def get_display_board():
 
 # 자동으로 아래로 이동
 current_time = time.time()
-if st.session_state.block_active and current_time - st.session_state.last_move_time > 0.5:
+elapsed_time = current_time - st.session_state.start_time
+interval_decrease = int(elapsed_time // 5) * 0.15
+move_interval = max(0.2, 2.0 - interval_decrease)
+
+if st.session_state.block_active and current_time - st.session_state.last_move_time > move_interval:
     move_block(1, 0)
     st.session_state.last_move_time = current_time
 elif not st.session_state.block_active:
