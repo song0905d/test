@@ -133,7 +133,6 @@ if not st.session_state.game_over and now - st.session_state.drop_timer >= inter
         clear_lines()
         spawn_new_block()
     st.session_state.drop_timer = now
-    st.experimental_rerun()
 
 if st.session_state.game_over:
     st.error(f"💀 게임 오버! 최종 점수: {st.session_state.score}")
