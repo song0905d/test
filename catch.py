@@ -7,7 +7,7 @@ import copy
 st.set_page_config(page_title="자동 테트리스", layout="wide")
 
 # 보드 설정
-ROWS, COLS = 6, 14  # 세로 줄 줄이고 가로 늘림
+ROWS, COLS = 11, 14  # 세로 5줄 늘림, 가로 넓게 유지
 EMPTY = "⬛"
 BLOCKS = {
     'O': [[1, 1], [1, 1]],
@@ -121,11 +121,11 @@ def get_display_board():
                         display[r][c] = 1
     return display
 
-# 자동 하강 처리
+# 자동 하강 처리 (가상 버튼 클릭처럼 구현)
 current_time = time.time()
 elapsed_time = current_time - st.session_state.start_time
 interval_decrease = int(elapsed_time // 5) * 0.15
-move_interval = max(0.2, 2.0 - interval_decrease)
+move_interval = max(0.3, 2.0 - interval_decrease)
 level = 1 + int(elapsed_time // 10)
 
 if not st.session_state.game_over:
@@ -144,7 +144,7 @@ if st.session_state.game_over:
     st.error(f"💀 게임 오버! 최종 점수: {st.session_state.score}")
 else:
     st.write(f"🏆 점수: {st.session_state.score} | 📈 최고 점수: {st.session_state.high_score} | 🎮 레벨: {level}")
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         if st.button("⬅️"):
             move_block(0, -1)
@@ -154,8 +154,12 @@ else:
     with col3:
         if st.button("➡️"):
             move_block(0, 1)
+    with col4:
+        if st.button("⬇️ 아래로"):
+            move_block(1, 0)
 
 # 보드 출력
 board_display = get_display_board()
 for row in board_display:
     st.markdown("".join([BLOCK_EMOJI if cell else EMPTY for cell in row]))
+
