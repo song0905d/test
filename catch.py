@@ -4,10 +4,10 @@ import random
 import copy
 
 # 페이지 설정
-st.set_page_config(page_title="자동 테트리스", layout="centered")
+st.set_page_config(page_title="자동 테트리스", layout="wide")
 
 # 보드 설정
-ROWS, COLS = 10, 10  # 세로 절반, 가로 원래대로
+ROWS, COLS = 6, 14  # 세로 줄 줄이고 가로 늘림
 EMPTY = "⬛"
 BLOCKS = {
     'O': [[1, 1], [1, 1]],
