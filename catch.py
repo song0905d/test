@@ -90,10 +90,11 @@ elapsed_time = current_time - st.session_state.start_time
 interval_decrease = int(elapsed_time // 5) * 0.15
 move_interval = max(0.2, 2.0 - interval_decrease)
 
-if st.session_state.block_active and current_time - st.session_state.last_move_time > move_interval:
-    move_block(1, 0)
-    st.session_state.last_move_time = current_time
-elif not st.session_state.block_active:
+if st.session_state.block_active:
+    if current_time - st.session_state.last_move_time >= move_interval:
+        move_block(1, 0)
+        st.session_state.last_move_time = current_time
+else:
     clear_lines()
     st.session_state.block_pos = [0, COLS // 2 - 1]
     st.session_state.block_active = True
@@ -109,6 +110,11 @@ with col1:
 with col2:
     if st.button("➡️"):
         move_block(0, 1)
+
+# 보드 출력
+board_display = get_display_board()
+for row in board_display:
+    st.markdown("".join([BLOCK if cell else EMPTY for cell in row]))
 
 # 보드 출력
 board_display = get_display_board()
