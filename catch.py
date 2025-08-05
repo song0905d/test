@@ -1,3 +1,5 @@
+# 다시 시작 버튼 정상화 + 시작 위치 시각화 개선
+
 import streamlit as st
 import random
 import time
@@ -5,7 +7,7 @@ import pandas as pd
 
 # 로봇 방향 표시
 direction_symbols = ['↑', '→', '↓', '←']
-dx = [-1, 0, 1, 0]  # 위, 오른쪽, 아래, 왼쪽
+dx = [-1, 0, 1, 0]
 dy = [0, 1, 0, -1]
 
 # 점수 테이블 초기화
@@ -32,7 +34,8 @@ def create_map(level):
     grid[start_pos[0]][start_pos[1]] = direction_symbols[start_dir]
     grid[goal_pos[0]][goal_pos[1]] = '🎯'
     for ox, oy in obstacle_pos:
-        grid[ox][oy] = '🧱'
+        if (ox, oy) != start_pos and (ox, oy) != goal_pos:
+            grid[ox][oy] = '🧱'
 
     return grid, start_pos, start_dir, goal_pos, set(obstacle_pos)
 
@@ -66,13 +69,18 @@ def move_robot(grid, pos, direction, commands, goal_pos, obstacles, level):
                 reached_goal = True
                 break
         grid[x][y] = direction_symbols[direction]
-    return grid, reached_goal, score
+    return grid, reached_goal, score, (x, y, direction)
 
-# UI
+# UI 시작
 st.title("🤖 로봇 명령어 퍼즐 게임 (시간 제한 & 점수 저장)")
 
 level = st.selectbox("레벨을 선택하세요", [1, 2, 3], format_func=lambda x: f"Level {x}")
 
+if st.button("🔁 다시 시작"):
+    st.session_state.grid, st.session_state.pos, st.session_state.dir, st.session_state.goal, st.session_state.obstacles = create_map(level)
+    st.session_state.score = 0
+
+# 초기화
 if 'grid' not in st.session_state:
     st.session_state.grid, st.session_state.pos, st.session_state.dir, st.session_state.goal, st.session_state.obstacles = create_map(level)
     st.session_state.score = 0
@@ -88,11 +96,10 @@ render_grid(st.session_state.grid)
 commands_input = st.text_area("명령어 입력 (예: 앞으로, 오른쪽 회전, 왼쪽 회전, 집기)", height=150)
 commands = [line.strip() for line in commands_input.strip().split('\n') if line.strip()]
 
-# 명령 실행
 if st.button("명령어 실행"):
     start_time = time.time()
     st.write("⏱ 명령 실행 중입니다... (12초 제한)")
-    grid, success, delta_score = move_robot(
+    grid, success, delta_score, final_state = move_robot(
         st.session_state.grid,
         st.session_state.pos,
         st.session_state.dir,
@@ -115,12 +122,13 @@ if st.button("명령어 실행"):
     if st.session_state.score > st.session_state.max_score:
         st.session_state.max_score = st.session_state.score
 
+    x, y, d = final_state
+    grid[x][y] = direction_symbols[d]
     st.session_state.grid = grid
 
     st.markdown(f"### 🧮 현재 점수: {st.session_state.score}")
     st.markdown(f"### 🏆 최고 점수: {st.session_state.max_score}")
     st.markdown(f"### 📊 누적 점수: {st.session_state.total_score}")
-
     render_grid(grid)
 
     if success:
@@ -137,7 +145,6 @@ if st.button("명령어 실행"):
         "시간(초)": round(elapsed, 2)
     })
 
-# 점수 저장 다운로드
 if st.button("💾 점수 기록 저장"):
     df = pd.DataFrame(st.session_state.score_log)
     st.download_button(
@@ -147,8 +154,3 @@ if st.button("💾 점수 기록 저장"):
         mime='text/csv'
     )
 
-# 다시 시작
-if st.button("🔁 다시 시작"):
-    st.session_state.grid, st.session_state.pos, st.session_state.dir, st.session_state.goal, st.session_state.obstacles = create_map(level)
-    st.session_state.score = 0
-    st.experimental_rerun()
