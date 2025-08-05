@@ -17,27 +17,23 @@ BLOCKS = {
 }
 BLOCK_EMOJI = "🟥"
 
-# 상태 초기화
-if 'board' not in st.session_state:
+# 상태 초기화 함수
+def reset_game():
     st.session_state.board = [[0 for _ in range(COLS)] for _ in range(ROWS)]
-if 'block_pos' not in st.session_state:
     st.session_state.block_pos = [0, COLS // 2 - 1]
-if 'block_active' not in st.session_state:
     st.session_state.block_active = True
-if 'start_time' not in st.session_state:
     st.session_state.start_time = time.time()
-if 'last_move_time' not in st.session_state:
     st.session_state.last_move_time = time.time()
-if 'current_block' not in st.session_state:
     st.session_state.current_block = random.choice(list(BLOCKS.values()))
-if 'game_over' not in st.session_state:
     st.session_state.game_over = False
-if 'score' not in st.session_state:
     st.session_state.score = 0
+    st.session_state.tick = time.time() - 2
+
+# 초기 실행 시 상태 설정
+if 'board' not in st.session_state:
+    reset_game()
 if 'high_score' not in st.session_state:
     st.session_state.high_score = 0
-if 'tick' not in st.session_state:
-    st.session_state.tick = time.time()
 
 # 블록 회전 함수
 def rotate_block(block):
@@ -68,9 +64,10 @@ def check_collision(dr, dc, block=None):
                     return True
     return False
 
-# 블록 이동
-
-def move_block(dr, dc):
+# 블록 이동 (하강은 자동으로만 수행)
+def move_block(dr, dc, force=False):
+    if dr == 1 and not force:
+        return  # 수동 하강 금지
     if not check_collision(dr, dc):
         st.session_state.block_pos[0] += dr
         st.session_state.block_pos[1] += dc
@@ -88,7 +85,7 @@ def rotate_current_block():
 # 줄 삭제 및 점수 처리
 
 def clear_lines():
-    new_board = [row for row in st.session_state.board if any(cell == 0 for cell in row)]
+    new_board = [row for row in st.session_state.board if not all(cell == 1 for cell in row)]
     cleared = ROWS - len(new_board)
     for _ in range(cleared):
         new_board.insert(0, [0] * COLS)
@@ -96,6 +93,8 @@ def clear_lines():
     st.session_state.score += cleared * 100
     if st.session_state.score > st.session_state.high_score:
         st.session_state.high_score = st.session_state.score
+    if cleared > 0:
+        st.audio("https://www.soundjay.com/button/beep-07.wav", autoplay=True)
 
 # 새 블록 생성 및 게임 오버 확인
 
@@ -106,6 +105,7 @@ def spawn_new_block():
     st.session_state.last_move_time = time.time()
     if check_collision(0, 0):
         st.session_state.game_over = True
+        st.audio("https://www.soundjay.com/button/beep-10.wav", autoplay=True)
 
 # 보드 표시용 복사본
 
@@ -121,30 +121,27 @@ def get_display_board():
                         display[r][c] = 1
     return display
 
-# 자동 하강 처리 (가상 버튼 클릭처럼 구현)
+# 자동 하강 처리 (1초마다)
 current_time = time.time()
-elapsed_time = current_time - st.session_state.start_time
-interval_decrease = int(elapsed_time // 5) * 0.15
-move_interval = max(0.3, 2.0 - interval_decrease)
-level = 1 + int(elapsed_time // 10)
-
 if not st.session_state.game_over:
-    if current_time - st.session_state.tick > move_interval:
+    if current_time - st.session_state.tick > 1.0:
         if st.session_state.block_active:
-            move_block(1, 0)
+            move_block(1, 0, force=True)
         else:
             clear_lines()
             spawn_new_block()
         st.session_state.tick = current_time
 
 # UI 출력
-st.title("🧱 자동 테트리스")
+st.title("🧱 자동 테트리스 with 사운드")
 
 if st.session_state.game_over:
     st.error(f"💀 게임 오버! 최종 점수: {st.session_state.score}")
+    if st.button("🔁 다시 시작"):
+        reset_game()
 else:
-    st.write(f"🏆 점수: {st.session_state.score} | 📈 최고 점수: {st.session_state.high_score} | 🎮 레벨: {level}")
-    col1, col2, col3, col4 = st.columns(4)
+    st.write(f"🏆 점수: {st.session_state.score} | 📈 최고 점수: {st.session_state.high_score}")
+    col1, col2, col3 = st.columns(3)
     with col1:
         if st.button("⬅️"):
             move_block(0, -1)
@@ -154,12 +151,8 @@ else:
     with col3:
         if st.button("➡️"):
             move_block(0, 1)
-    with col4:
-        if st.button("⬇️ 아래로"):
-            move_block(1, 0)
 
 # 보드 출력
 board_display = get_display_board()
 for row in board_display:
     st.markdown("".join([BLOCK_EMOJI if cell else EMPTY for cell in row]))
-
