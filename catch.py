@@ -2,6 +2,10 @@ import streamlit as st
 import time
 import random
 import copy
+from streamlit_autorefresh import st_autorefresh
+
+# 자동 새로고침: 매 1000ms = 1초
+st_autorefresh(interval=1000, key="auto_refresh")
 
 # 페이지 설정
 st.set_page_config(page_title="자동 테트리스", layout="wide")
@@ -156,3 +160,4 @@ else:
 board_display = get_display_board()
 for row in board_display:
     st.markdown("".join([BLOCK_EMOJI if cell else EMPTY for cell in row]))
+
