@@ -3,90 +3,104 @@ import time
 import random
 
 # 페이지 설정
-st.set_page_config(page_title="두더지 잡기 게임", layout="centered")
+st.set_page_config(page_title="턴제 테트리스", layout="centered")
+
+# 보드 설정
+ROWS, COLS = 20, 10
+EMPTY = "⬛"
+BLOCK = "🟥"
+
+# 기본 블록 (2x2 정사각형)
+BLOCK_SHAPE = [[1, 1],
+                [1, 1]]
 
 # 상태 초기화
-if 'score' not in st.session_state:
-    st.session_state.score = 0
-if 'high_score' not in st.session_state:
-    st.session_state.high_score = 0
-if 'start_time' not in st.session_state:
-    st.session_state.start_time = None
-if 'game_over' not in st.session_state:
-    st.session_state.game_over = False
-if 'mole_position' not in st.session_state:
-    st.session_state.mole_position = None
-if 'last_mole_time' not in st.session_state:
-    st.session_state.last_mole_time = 0
-if 'mole_duration' not in st.session_state:
-    st.session_state.mole_duration = 1.1
+if 'board' not in st.session_state:
+    st.session_state.board = [[0 for _ in range(COLS)] for _ in range(ROWS)]
+if 'block_pos' not in st.session_state:
+    st.session_state.block_pos = [0, COLS // 2 - 1]  # 시작 위치
+if 'block_active' not in st.session_state:
+    st.session_state.block_active = True
 
-# 설정
-GRID_SIZE = 6
-GAME_DURATION = 45  # 게임 시간 (초)
-START_DURATION = 1.1  # 시작 노출 시간
-MIN_DURATION = 0.3    # 최소 노출 시간
-INTERVAL_DECREASE = 0.11  # 5초마다 감소량
+# 블록 놓기 함수
+def place_block():
+    for i in range(2):
+        for j in range(2):
+            if BLOCK_SHAPE[i][j]:
+                r = st.session_state.block_pos[0] + i
+                c = st.session_state.block_pos[1] + j
+                if 0 <= r < ROWS and 0 <= c < COLS:
+                    st.session_state.board[r][c] = 1
 
-# 타이머 시작 함수
-def start_game():
-    st.session_state.score = 0
-    st.session_state.start_time = time.time()
-    st.session_state.game_over = False
-    st.session_state.mole_position = None
-    st.session_state.last_mole_time = 0
-    st.session_state.mole_duration = START_DURATION
-    set_random_mole()
+# 블록 충돌 검사
 
-# 노출 시간 계산 함수
-def get_mole_duration():
-    elapsed = time.time() - st.session_state.start_time
-    dec = int(elapsed // 5) * INTERVAL_DECREASE
-    return max(MIN_DURATION, START_DURATION - dec)
+def check_collision(dr, dc):
+    for i in range(2):
+        for j in range(2):
+            if BLOCK_SHAPE[i][j]:
+                r = st.session_state.block_pos[0] + i + dr
+                c = st.session_state.block_pos[1] + j + dc
+                if r >= ROWS or c < 0 or c >= COLS:
+                    return True
+                if r >= 0 and st.session_state.board[r][c]:
+                    return True
+    return False
 
-# 두더지 랜덤 위치 설정
-def set_random_mole():
-    st.session_state.mole_position = (random.randint(0, GRID_SIZE - 1), random.randint(0, GRID_SIZE - 1))
-    st.session_state.last_mole_time = time.time()
-    st.session_state.mole_duration = get_mole_duration()
+# 블록 이동
 
-# 점수 증가 함수
-def hit_mole(row, col):
-    if not st.session_state.game_over and st.session_state.mole_position == (row, col):
-        st.session_state.score += 1
-        set_random_mole()
+def move_block(dr, dc):
+    if not check_collision(dr, dc):
+        st.session_state.block_pos[0] += dr
+        st.session_state.block_pos[1] += dc
+    elif dr == 1:
+        # 아래로 못 움직이면 고정
+        st.session_state.block_active = False
+        place_block()
 
-# UI 렌더링
-st.title("🎯 두더지 잡기 게임")
+# 한 줄 완성 시 삭제
 
-if st.button("게임 시작 / 재시작"):
-    start_game()
+def clear_lines():
+    new_board = [row for row in st.session_state.board if any(cell == 0 for cell in row)]
+    cleared = ROWS - len(new_board)
+    for _ in range(cleared):
+        new_board.insert(0, [0] * COLS)
+    st.session_state.board = new_board
 
-# 게임 실행
-if st.session_state.start_time:
-    elapsed_time = time.time() - st.session_state.start_time
-    remaining_time = max(0, int(GAME_DURATION - elapsed_time))
-    st.write(f"⏱️ 남은 시간: {remaining_time}초")
-    st.write(f"🏆 현재 점수: {st.session_state.score}")
-    st.write(f"⭐ 최고 점수: {st.session_state.high_score}")
+# 블록 시각화용 복사 보드 만들기
 
-    if elapsed_time >= GAME_DURATION:
-        st.session_state.game_over = True
-        if st.session_state.score > st.session_state.high_score:
-            st.session_state.high_score = st.session_state.score
-        st.success("게임 종료! 다시 시작하려면 버튼을 누르세요.")
-    else:
-        # 두더지 자동 사라짐 처리
-        if time.time() - st.session_state.last_mole_time >= st.session_state.mole_duration:
-            set_random_mole()
+def get_display_board():
+    display = [row[:] for row in st.session_state.board]
+    if st.session_state.block_active:
+        for i in range(2):
+            for j in range(2):
+                if BLOCK_SHAPE[i][j]:
+                    r = st.session_state.block_pos[0] + i
+                    c = st.session_state.block_pos[1] + j
+                    if 0 <= r < ROWS and 0 <= c < COLS:
+                        display[r][c] = 1
+    return display
 
-        for row in range(GRID_SIZE):
-            cols = st.columns(GRID_SIZE)
-            for col in range(GRID_SIZE):
-                key = f"{row}-{col}-{st.session_state.mole_position}"
-                with cols[col]:
-                    if (row, col) == st.session_state.mole_position:
-                        if st.button("🐹", key=key):
-                            hit_mole(row, col)
-                    else:
-                        st.button("", key=key, disabled=True)
+# UI
+st.title("🧱 턴제 테트리스 (간단 버전)")
+
+col1, col2, col3, col4 = st.columns(4)
+with col1:
+    if st.button("⬅️"):
+        move_block(0, -1)
+with col2:
+    if st.button("⬇️"):
+        move_block(1, 0)
+with col3:
+    if st.button("➡️"):
+        move_block(0, 1)
+with col4:
+    if st.button("🔄 새 블록"):
+        clear_lines()
+        st.session_state.block_pos = [0, COLS // 2 - 1]
+        st.session_state.block_active = True
+
+# 보드 출력
+board_display = get_display_board()
+for row in board_display:
+    st.markdown("".join([BLOCK if cell else EMPTY for cell in row]))
+
