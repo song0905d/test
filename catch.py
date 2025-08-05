@@ -16,6 +16,10 @@ if 'game_over' not in st.session_state:
     st.session_state.game_over = False
 if 'mole_position' not in st.session_state:
     st.session_state.mole_position = None
+if 'last_mole_time' not in st.session_state:
+    st.session_state.last_mole_time = 0
+if 'mole_duration' not in st.session_state:
+    st.session_state.mole_duration = 1.1
 
 # 설정
 GRID_SIZE = 3
@@ -30,6 +34,9 @@ def start_game():
     st.session_state.start_time = time.time()
     st.session_state.game_over = False
     st.session_state.mole_position = None
+    st.session_state.last_mole_time = 0
+    st.session_state.mole_duration = START_DURATION
+    set_random_mole()
 
 # 노출 시간 계산 함수
 def get_mole_duration():
@@ -40,6 +47,8 @@ def get_mole_duration():
 # 두더지 랜덤 위치 설정
 def set_random_mole():
     st.session_state.mole_position = (random.randint(0, GRID_SIZE - 1), random.randint(0, GRID_SIZE - 1))
+    st.session_state.last_mole_time = time.time()
+    st.session_state.mole_duration = get_mole_duration()
 
 # 점수 증가 함수
 def hit_mole(row, col):
@@ -52,7 +61,6 @@ st.title("🎯 두더지 잡기 게임")
 
 if st.button("게임 시작 / 재시작"):
     start_game()
-    set_random_mole()
 
 # 게임 실행
 if st.session_state.start_time:
@@ -68,14 +76,18 @@ if st.session_state.start_time:
             st.session_state.high_score = st.session_state.score
         st.success("게임 종료! 다시 시작하려면 버튼을 누르세요.")
     else:
-        duration = get_mole_duration()
+        # 두더지 자동 사라짐 처리
+        if time.time() - st.session_state.last_mole_time >= st.session_state.mole_duration:
+            set_random_mole()
 
         cols = st.columns(GRID_SIZE)
         for row in range(GRID_SIZE):
             with cols[row]:
                 for col in range(GRID_SIZE):
+                    key = f"{row}-{col}-{st.session_state.mole_position}"
                     if (row, col) == st.session_state.mole_position:
-                        if st.button("🐹", key=f"{row}-{col}-{time.time()}"):
+                        if st.button("🐹", key=key):
                             hit_mole(row, col)
-        time.sleep(duration)
-        set_random_mole()
+                    else:
+                        st.button("", key=key, disabled=True)
+
