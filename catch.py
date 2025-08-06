@@ -330,17 +330,7 @@ for line in commands.strip().split('\n'):
         corrected_lines.append(stripped)
 commands = "\n".join(corrected_lines)
 
-# 명령어 자동완성 버튼 (예시 세트 삽입)
-if st.button("\U0001f504 예시 명령어 자동삽입"):
-    example_commands = [
-        "앞으로 2",
-        "오른쪽 회전",
-        "앞으로 3",
-        "왼쪽 회전",
-        "앞으로",
-        "집기"
-    ]
-    st.session_state["command_input"] = '\n'.join(example_commands)
+
 
 # 경로 → 명령어 변환 함수
 def path_to_commands(path, initial_direction='UP'):
