@@ -1,7 +1,6 @@
 import streamlit as st
 import random
 import time
-import pandas as pd
 from collections import deque
 
 # ----------------------------- 설정 ----------------------------- #
@@ -9,57 +8,57 @@ DIRECTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT']
 DIRECTION_SYMBOLS = {'UP': '↑', 'RIGHT': '→', 'DOWN': '↓', 'LEFT': '←'}
 MOVE_OFFSET = {'UP': (-1, 0), 'DOWN': (1, 0), 'LEFT': (0, -1), 'RIGHT': (0, 1)}
 LEVELS = {
-    "Level 1 (5점, 착한맛)": {"obstacles": 5, "score": 5},
-    "Level 2 (10점, 보통맛)": {"obstacles": 9, "score": 10},
-    "Level 3 (20점, 매운맛)": {"obstacles": 13, "score": 20},
-    "Level 4 (30점, 불닭맛)": {"obstacles": 22, "score": 30},
-    "Level 5 (50점, 핵불닭맛)": {"obstacles": 25, "score": 50},
+    "Level 1 (5점, 착한맛)": {"obstacles": 5, "score": 5, "ghost": False},
+    "Level 2 (10점, 보통맛)": {"obstacles": 9, "score": 10, "ghost": False},
+    "Level 3 (20점, 매운맛)": {"obstacles": 13, "score": 20, "ghost": False},
+    "Level 4 (30점, 불닭맛)": {"obstacles": 22, "score": 30, "ghost": True, "ghost_range": 7, "ignore_obstacles": False},
+    "Level 5 (50점, 핵불닭맛)": {"obstacles": 25, "score": 50, "ghost": True, "ghost_range": 5, "ignore_obstacles": True, "portals": True},
 }
-MAP_SIZE = 9  # 한 칸 늘림
+MAP_SIZE = 10  # 9x9보다 한 칸씩 늘림
+PORTAL_SYMBOL = '🌀'
 
 # ----------------------------- 함수 ----------------------------- #
-def generate_map(obstacle_count, goal_count=2):
+def generate_map(obstacle_count, goal_count=2, use_portals=False):
     while True:
         positions = [(i, j) for i in range(MAP_SIZE) for j in range(MAP_SIZE)]
         start = random.choice(positions)
         positions.remove(start)
 
         obstacles = set(random.sample(positions, obstacle_count))
-        for ob in obstacles:
-            if ob in positions:
-                positions.remove(ob)
+        positions = [p for p in positions if p not in obstacles]
 
         goals = random.sample(positions, goal_count)
+        positions = [p for p in positions if p not in goals]
 
-        # 목표 지점이 모두 접근 가능해야 함
-        if all(bfs_shortest_path(start, [goal], obstacles) for goal in goals):
+        portals = []
+        if use_portals:
+            portals = random.sample(positions, 2)
+
+        # 모든 목표 도달 가능한지 확인
+        if all(bfs_shortest_path(start, [g], obstacles) for g in goals):
             break
 
-    ghost1 = (max(0, start[0]-7), start[1])
-    ghost2 = (min(MAP_SIZE-1, start[0]+5), start[1])
-    return start, obstacles, goals, ghost1, ghost2
+    return start, obstacles, goals, portals
 
 def rotate(direction, turn):
     idx = DIRECTIONS.index(direction)
-    if turn == '오른쪽 회전': return DIRECTIONS[(idx + 1) % 4]
-    else: return DIRECTIONS[(idx - 1) % 4]
+    return DIRECTIONS[(idx + 1) % 4] if turn == '오른쪽 회전' else DIRECTIONS[(idx - 1) % 4]
 
 def move_forward(pos, direction, steps):
     for _ in range(steps):
         offset = MOVE_OFFSET[direction]
         pos = (pos[0] + offset[0], pos[1] + offset[1])
         if not (0 <= pos[0] < MAP_SIZE and 0 <= pos[1] < MAP_SIZE):
-            return None  # 벗어남
+            return None
     return pos
 
-def move_ghost(pos, player_pos, obstacles, ignore_obstacles=False):
-    dx = player_pos[0] - pos[0]
-    dy = player_pos[1] - pos[1]
-    move_x = (1 if dx > 0 else -1) if dx != 0 else 0
-    move_y = (1 if dy > 0 else -1) if dy != 0 else 0
+def move_ghost(pos, target, obstacles, ignore_obstacles=False):
+    dx, dy = target[0] - pos[0], target[1] - pos[1]
     options = []
-    if move_x: options.append((pos[0] + move_x, pos[1]))
-    if move_y: options.append((pos[0], pos[1] + move_y))
+    if dx != 0:
+        options.append((pos[0] + (1 if dx > 0 else -1), pos[1]))
+    if dy != 0:
+        options.append((pos[0], pos[1] + (1 if dy > 0 else -1)))
     for opt in options:
         if 0 <= opt[0] < MAP_SIZE and 0 <= opt[1] < MAP_SIZE:
             if ignore_obstacles or opt not in obstacles:
@@ -68,21 +67,20 @@ def move_ghost(pos, player_pos, obstacles, ignore_obstacles=False):
 
 def bfs_shortest_path(start, goals, obstacles):
     queue = deque([(start, [])])
-    visited = set([start])
+    visited = {start}
     while queue:
         current, path = queue.popleft()
         if current in goals:
             return path
-        for move in MOVE_OFFSET.values():
-            nx = current[0] + move[0]
-            ny = current[1] + move[1]
-            new = (nx, ny)
-            if 0 <= nx < MAP_SIZE and 0 <= ny < MAP_SIZE and new not in obstacles and new not in visited:
-                visited.add(new)
-                queue.append((new, path + [new]))
+        for d in MOVE_OFFSET.values():
+            nx, ny = current[0] + d[0], current[1] + d[1]
+            next_pos = (nx, ny)
+            if 0 <= nx < MAP_SIZE and 0 <= ny < MAP_SIZE and next_pos not in obstacles and next_pos not in visited:
+                visited.add(next_pos)
+                queue.append((next_pos, path + [next_pos]))
     return []
 
-def draw_grid(position, direction, ghost1, ghost2, ghost_path, obstacles, goals):
+def draw_grid(position, direction, ghost, ghost_path, obstacles, goals, portals):
     grid = ""
     for i in range(MAP_SIZE):
         for j in range(MAP_SIZE):
@@ -93,109 +91,174 @@ def draw_grid(position, direction, ghost1, ghost2, ghost_path, obstacles, goals)
                 cell = '⬛'
             elif (i, j) in goals:
                 cell = '🎯'
-            elif (i, j) == ghost1:
+            elif (i, j) == ghost:
                 cell = '👻'
-            elif (i, j) == ghost2:
-                cell = '💀'
             elif (i, j) in ghost_path:
                 cell = '·'
+            elif (i, j) in portals:
+                cell = PORTAL_SYMBOL
             grid += cell
         grid += '\n'
     st.text(grid)
 
 # ----------------------------- 실행 ----------------------------- #
 st.title("🤖 로봇 명령 퍼즐 게임")
-st.markdown("명령어 예시: 앞으로, 앞으로 2, 앞으로 3, 왼쪽 회전, 오른쪽 회전, 집기")
+st.markdown("""
+- 명령어 예시:
+    - 앞으로
+    - 앞으로 2
+    - 앞으로 3
+    - 왼쪽 회전
+    - 오른쪽 회전
+    - 집기
+""")
 
-if 'level' not in st.session_state:
-    st.session_state.level = list(LEVELS.keys())[0]
-    st.session_state.start, st.session_state.obstacles, st.session_state.goals, st.session_state.ghost1, st.session_state.ghost2 = generate_map(LEVELS[st.session_state.level]['obstacles'])
-    st.session_state.direction = 'UP'
-    st.session_state.position = st.session_state.start
-    st.session_state.commands = []
-    st.session_state.score = 0
-    st.session_state.total_score = 0
-    st.session_state.high_score = 0
-    st.session_state.result = ''
-    st.session_state.ghost_path = []
+if 'state' not in st.session_state:
+    default_level = list(LEVELS.keys())[0]
+    level_info = LEVELS[default_level]
+    start, obstacles, goals, portals = generate_map(level_info['obstacles'], use_portals=level_info.get('portals', False))
+    ghost_range = level_info.get('ghost_range', 0)
+    ghost = (min(MAP_SIZE - 1, start[0] + ghost_range), start[1]) if level_info['ghost'] else None
+    st.session_state.state = {
+        'level': default_level,
+        'start': start,
+        'position': start,
+        'direction': 'UP',
+        'obstacles': obstacles,
+        'goals': goals,
+        'portals': portals,
+        'ghost': ghost,
+        'ghost_path': [],
+        'score': 0,
+        'high_score': 0,
+        'total_score': 0,
+        'result': '',
+        'commands': []
+    }
 
-level = st.selectbox("레벨 선택", list(LEVELS.keys()))
-if level != st.session_state.level:
-    st.session_state.level = level
-    st.session_state.start, st.session_state.obstacles, st.session_state.goals, st.session_state.ghost1, st.session_state.ghost2 = generate_map(LEVELS[level]['obstacles'])
-    st.session_state.direction = 'UP'
-    st.session_state.position = st.session_state.start
-    st.session_state.commands = []
-    st.session_state.result = ''
-    st.session_state.ghost_path = []
+selected_level = st.selectbox("레벨 선택", list(LEVELS.keys()))
+if selected_level != st.session_state.state['level']:
+    level_info = LEVELS[selected_level]
+    start, obstacles, goals, portals = generate_map(level_info['obstacles'], use_portals=level_info.get('portals', False))
+    ghost_range = level_info.get('ghost_range', 0)
+    ghost = (min(MAP_SIZE - 1, start[0] + ghost_range), start[1]) if level_info['ghost'] else None
+    st.session_state.state.update({
+        'level': selected_level,
+        'start': start,
+        'position': start,
+        'direction': 'UP',
+        'obstacles': obstacles,
+        'goals': goals,
+        'portals': portals,
+        'ghost': ghost,
+        'ghost_path': [],
+        'result': '',
+        'commands': []
+    })
 
 commands = st.text_area("명령어 입력 (줄바꿈으로 분리)")
 if st.button("실행"):
-    pos = st.session_state.start
+    s = st.session_state.state
+    pos = s['start']
     direction = 'UP'
-    ghost1 = st.session_state.ghost1
-    ghost2 = st.session_state.ghost2
+    ghost = s['ghost']
     ghost_path = []
     visited_goals = set()
     failed = False
+
     command_list = commands.strip().split('\n')
     for cmd in command_list:
-        st.write(f"➡️ 명령어 실행: `{cmd}`")
+        st.write(f"➡️ 명령어: `{cmd}`")
         cmd = cmd.strip()
         if cmd.startswith("앞으로"):
-            parts = cmd.split()
-            steps = int(parts[1]) if len(parts) > 1 else 1
-            new_pos = move_forward(pos, direction, steps)
-            if new_pos is None or any((pos[0] + i * MOVE_OFFSET[direction][0], pos[1] + i * MOVE_OFFSET[direction][1]) in st.session_state.obstacles for i in range(1, steps+1)):
-                st.session_state.result = '장애물에 부딪혔습니다!'
-                failed = True
-                break
-            pos = new_pos
+            steps = int(cmd.split()[1]) if len(cmd.split()) > 1 else 1
+            for step in range(1, steps+1):
+                temp_pos = move_forward(pos, direction, 1)
+                if temp_pos is None or temp_pos in s['obstacles']:
+                    s['result'] = '❌ 장애물 충돌 또는 벽 밖으로 벗어남'
+                    failed = True
+                    break
+                pos = temp_pos
         elif "회전" in cmd:
             direction = rotate(direction, cmd)
-        elif cmd == "집기":
-            if pos in st.session_state.goals:
-                visited_goals.add(pos)
-        # 귀신 이동
-        ghost1 = move_ghost(ghost1, pos, st.session_state.obstacles, ignore_obstacles=("Level 5" in level))
-        ghost2 = move_ghost(ghost2, pos, st.session_state.obstacles, ignore_obstacles=("Level 5" in level))
-        ghost_path.append(ghost1)
-        ghost_path.append(ghost2)
-        if pos == ghost1 or pos == ghost2:
-            st.session_state.result = '귀신에게 잡혔습니다!'
+        elif cmd == "집기" and pos in s['goals']:
+            visited_goals.add(pos)
+
+        if failed:
+            break
+
+        if ghost:
+            ghost = move_ghost(ghost, pos, s['obstacles'], ignore_obstacles=LEVELS[s['level']].get('ignore_obstacles', False))
+            ghost_path.append(ghost)
+            if pos == ghost:
+                s['result'] = '👻 귀신에게 잡힘!'
+                failed = True
+                break
+
+        if pos in s['obstacles']:
+            s['result'] = '❌ 장애물에 충돌!'
             failed = True
             break
-        draw_grid(pos, direction, ghost1, ghost2, ghost_path, st.session_state.obstacles, st.session_state.goals)
-        time.sleep(0.5)
+
+        draw_grid(pos, direction, ghost, ghost_path, s['obstacles'], s['goals'], s['portals'])
+        time.sleep(0.4)
+
+        # 포탈 처리
+        if pos in s['portals']:
+            dest = [p for p in s['portals'] if p != pos][0]
+            around = [(dest[0] + d[0], dest[1] + d[1]) for d in MOVE_OFFSET.values()]
+            random.shuffle(around)
+            for a in around:
+                if 0 <= a[0] < MAP_SIZE and 0 <= a[1] < MAP_SIZE:
+                    pos = a
+                    break
 
     if not failed:
-        st.session_state.score = len(visited_goals) * LEVELS[level]['score']
-        st.session_state.total_score += st.session_state.score
-        st.session_state.high_score = max(st.session_state.high_score, st.session_state.score)
-        st.session_state.result = f"{len(visited_goals)}개 목표 도달! 🎉 점수: {st.session_state.score}"
+        score = len(visited_goals) * LEVELS[s['level']]['score']
+        s['score'] = score
+        s['total_score'] += score
+        s['high_score'] = max(s['high_score'], score)
+        s['result'] = f"🎯 목표 도달: {len(visited_goals)}개, 점수: {score}"
 
-        shortest = bfs_shortest_path(st.session_state.start, st.session_state.goals, st.session_state.obstacles)
-        if len(shortest) + shortest.count('집기') == len(command_list) and len(visited_goals) == 2:
-            st.session_state.result += "\n🌟 Perfect!"
+        shortest = bfs_shortest_path(s['start'], s['goals'], s['obstacles'])
+        if len(command_list) == len(shortest) + 2 and len(visited_goals) == 2:
+            s['result'] += '\n🌟 Perfect!'
 
-    st.session_state.commands = command_list
-    st.session_state.position = pos
-    st.session_state.direction = direction
-    st.session_state.ghost1 = ghost1
-    st.session_state.ghost2 = ghost2
-    st.session_state.ghost_path = ghost_path
+    s.update({
+        'position': pos,
+        'direction': direction,
+        'ghost': ghost,
+        'ghost_path': ghost_path,
+        'commands': command_list
+    })
 
-st.markdown(f"**현재 점수:** {st.session_state.score} / **최고 점수:** {st.session_state.high_score} / **누적 점수:** {st.session_state.total_score}")
-st.markdown(f"**결과:** {st.session_state.result}")
+st.markdown(f"**현재 점수:** {st.session_state.state['score']} / **최고 점수:** {st.session_state.state['high_score']} / **누적 점수:** {st.session_state.state['total_score']}")
+st.markdown(f"**결과:** {st.session_state.state['result']}")
 
-draw_grid(st.session_state.position, st.session_state.direction, st.session_state.ghost1, st.session_state.ghost2, st.session_state.ghost_path, st.session_state.obstacles, st.session_state.goals)
+draw_grid(
+    st.session_state.state['position'],
+    st.session_state.state['direction'],
+    st.session_state.state['ghost'],
+    st.session_state.state['ghost_path'],
+    st.session_state.state['obstacles'],
+    st.session_state.state['goals'],
+    st.session_state.state['portals']
+)
 
-if st.button("다시 시작"):
-    st.session_state.start, st.session_state.obstacles, st.session_state.goals, st.session_state.ghost1, st.session_state.ghost2 = generate_map(LEVELS[st.session_state.level]['obstacles'])
-    st.session_state.direction = 'UP'
-    st.session_state.position = st.session_state.start
-    st.session_state.commands = []
-    st.session_state.score = 0
-    st.session_state.result = ''
-    st.session_state.ghost_path = []
-
+if st.button("🔁 다시 시작"):
+    level_info = LEVELS[st.session_state.state['level']]
+    start, obstacles, goals, portals = generate_map(level_info['obstacles'], use_portals=level_info.get('portals', False))
+    ghost_range = level_info.get('ghost_range', 0)
+    ghost = (min(MAP_SIZE - 1, start[0] + ghost_range), start[1]) if level_info['ghost'] else None
+    st.session_state.state.update({
+        'start': start,
+        'position': start,
+        'direction': 'UP',
+        'obstacles': obstacles,
+        'goals': goals,
+        'portals': portals,
+        'ghost': ghost,
+        'ghost_path': [],
+        'result': '',
+        'commands': []
+    })
