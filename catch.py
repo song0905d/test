@@ -2,172 +2,192 @@ import streamlit as st
 import random
 import time
 import pandas as pd
+from collections import deque
 
-# 방향 설정
-direction_symbols = ['↑', '→', '↓', '←']
-dx = [-1, 0, 1, 0]
-dy = [0, 1, 0, -1]
+# ----------------------------- 설정 ----------------------------- #
+DIRECTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT']
+DIRECTION_SYMBOLS = {'UP': '↑', 'RIGHT': '→', 'DOWN': '↓', 'LEFT': '←'}
+MOVE_OFFSET = {'UP': (-1, 0), 'DOWN': (1, 0), 'LEFT': (0, -1), 'RIGHT': (0, 1)}
+LEVELS = {
+    "Level 1 (5점, 착한맛)": {"obstacles": 5, "score": 5},
+    "Level 2 (10점, 보통맛)": {"obstacles": 9, "score": 10},
+    "Level 3 (20점, 매운맛)": {"obstacles": 13, "score": 20},
+    "Level 4 (30점, 불닭맛)": {"obstacles": 22, "score": 30},
+    "Level 5 (50점, 핵불닭맛)": {"obstacles": 25, "score": 50},
+}
+MAP_SIZE = 8
 
-# 상태 초기화
-if 'score_log' not in st.session_state:
-    st.session_state.score_log = []
-if 'score' not in st.session_state:
+# ----------------------------- 함수 ----------------------------- #
+def generate_map(obstacle_count, goal_count=2):
+    positions = [(i, j) for i in range(MAP_SIZE) for j in range(MAP_SIZE)]
+    start = random.choice(positions)
+    positions.remove(start)
+
+    obstacles = set(random.sample(positions, obstacle_count))
+    for ob in obstacles:
+        positions.remove(ob)
+
+    goals = random.sample(positions, goal_count)
+    for goal in goals:
+        positions.remove(goal)
+
+    ghost1 = (max(0, start[0]-5), start[1])
+    ghost2 = (min(MAP_SIZE-1, start[0]+3), start[1])
+    return start, obstacles, goals, ghost1, ghost2
+
+def rotate(direction, turn):
+    idx = DIRECTIONS.index(direction)
+    if turn == '오른쪽 회전': return DIRECTIONS[(idx + 1) % 4]
+    else: return DIRECTIONS[(idx - 1) % 4]
+
+def move_forward(pos, direction, steps):
+    for _ in range(steps):
+        offset = MOVE_OFFSET[direction]
+        pos = (pos[0] + offset[0], pos[1] + offset[1])
+        if not (0 <= pos[0] < MAP_SIZE and 0 <= pos[1] < MAP_SIZE):
+            return None  # 벗어남
+    return pos
+
+def move_ghost(pos, player_pos, obstacles, ignore_obstacles=False):
+    dx = player_pos[0] - pos[0]
+    dy = player_pos[1] - pos[1]
+    move_x = (1 if dx > 0 else -1) if dx != 0 else 0
+    move_y = (1 if dy > 0 else -1) if dy != 0 else 0
+    options = []
+    if move_x: options.append((pos[0] + move_x, pos[1]))
+    if move_y: options.append((pos[0], pos[1] + move_y))
+    for opt in options:
+        if 0 <= opt[0] < MAP_SIZE and 0 <= opt[1] < MAP_SIZE:
+            if ignore_obstacles or opt not in obstacles:
+                return opt
+    return pos
+
+def bfs_shortest_path(start, goals, obstacles):
+    queue = deque([(start, [])])
+    visited = set([start])
+    while queue:
+        current, path = queue.popleft()
+        if current in goals:
+            return path
+        for move in MOVE_OFFSET.values():
+            nx = current[0] + move[0]
+            ny = current[1] + move[1]
+            new = (nx, ny)
+            if 0 <= nx < MAP_SIZE and 0 <= ny < MAP_SIZE and new not in obstacles and new not in visited:
+                visited.add(new)
+                queue.append((new, path + [new]))
+    return []
+
+# ----------------------------- 초기화 ----------------------------- #
+if 'level' not in st.session_state:
+    st.session_state.level = list(LEVELS.keys())[0]
+    st.session_state.start, st.session_state.obstacles, st.session_state.goals, st.session_state.ghost1, st.session_state.ghost2 = generate_map(LEVELS[st.session_state.level]['obstacles'])
+    st.session_state.direction = 'UP'
+    st.session_state.position = st.session_state.start
+    st.session_state.commands = []
     st.session_state.score = 0
-if 'max_score' not in st.session_state:
-    st.session_state.max_score = 0
-if 'total_score' not in st.session_state:
     st.session_state.total_score = 0
+    st.session_state.high_score = 0
+    st.session_state.result = ''
+    st.session_state.ghost_path = []
 
-# 맵 생성 함수
-def create_map(level):
-    size = 8
-    grid = [['⬜' for _ in range(size)] for _ in range(size)]
-    all_positions = [(i, j) for i in range(size) for j in range(size)]
+# ----------------------------- 레벨 선택 ----------------------------- #
+level = st.selectbox("레벨 선택", list(LEVELS.keys()))
+if level != st.session_state.level:
+    st.session_state.level = level
+    st.session_state.start, st.session_state.obstacles, st.session_state.goals, st.session_state.ghost1, st.session_state.ghost2 = generate_map(LEVELS[level]['obstacles'])
+    st.session_state.direction = 'UP'
+    st.session_state.position = st.session_state.start
+    st.session_state.commands = []
+    st.session_state.result = ''
+    st.session_state.ghost_path = []
 
-    start_pos = random.choice(all_positions)
-    all_positions.remove(start_pos)
+# ----------------------------- UI ----------------------------- #
+st.title("🤖 로봇 명령 퍼즐 게임")
+st.markdown("명령어 예시: 앞으로, 앞으로 2, 앞으로 3, 왼쪽 회전, 오른쪽 회전, 집기")
+commands = st.text_area("명령어 입력 (줄바꿈으로 분리)")
 
-    goal1 = random.choice(all_positions)
-    all_positions.remove(goal1)
-
-    goal2 = random.choice(all_positions)
-    all_positions.remove(goal2)
-
-    base_obstacles = {1: 5, 2: 10, 3: 15}
-    num_obstacles = base_obstacles.get(level, 5) + 4
-
-    obstacle_pos = random.sample(all_positions, num_obstacles)
-
-    start_dir = random.randint(0, 3) if level >= 2 else 0
-
-    grid[start_pos[0]][start_pos[1]] = direction_symbols[start_dir]
-    grid[goal1[0]][goal1[1]] = '🎯'
-    grid[goal2[0]][goal2[1]] = '🎯'
-    for ox, oy in obstacle_pos:
-        if (ox, oy) not in [start_pos, goal1, goal2]:
-            grid[ox][oy] = '🧱'
-
-    return grid, start_pos, start_dir, [goal1, goal2], set(obstacle_pos)
-
-# 격자 출력
-def render_grid(grid):
-    for row in grid:
-        st.markdown(''.join(row))
-
-# 명령어 처리 함수
-def move_robot(grid, pos, direction, commands, goal_positions, obstacles, level):
-    x, y = pos
-    size = len(grid)
-    score = 0
-    reached_goals = set()
-
-    for cmd in commands:
-        grid[x][y] = '⬜'
-
-        if cmd.startswith('앞으로'):
+if st.button("실행"):
+    pos = st.session_state.start
+    direction = 'UP'
+    ghost1 = st.session_state.ghost1
+    ghost2 = st.session_state.ghost2
+    ghost_path = []
+    visited_goals = set()
+    failed = False
+    for cmd in commands.strip().split('\n'):
+        cmd = cmd.strip()
+        if cmd.startswith("앞으로"):
             parts = cmd.split()
-            steps = 1
-            if len(parts) == 2 and parts[1].isdigit():
-                steps = int(parts[1])
-            for _ in range(steps):
-                nx, ny = x + dx[direction], y + dy[direction]
-                if 0 <= nx < size and 0 <= ny < size:
-                    if (nx, ny) in obstacles:
-                        score -= 2
-                    else:
-                        x, y = nx, ny
-        elif cmd == '오른쪽 회전':
-            direction = (direction + 1) % 4
-        elif cmd == '왼쪽 회전':
-            direction = (direction - 1) % 4
-        elif cmd == '집기':
-            if (x, y) in goal_positions and (x, y) not in reached_goals:
-                reached_goals.add((x, y))
-                grid[x][y] = '✅'
-                level_score = {1: 5, 2: 10, 3: 20}
-                score += level_score.get(level, 5)
+            steps = int(parts[1]) if len(parts) > 1 else 1
+            new_pos = move_forward(pos, direction, steps)
+            if new_pos is None or any((pos[0] + i * MOVE_OFFSET[direction][0], pos[1] + i * MOVE_OFFSET[direction][1]) in st.session_state.obstacles for i in range(1, steps+1)):
+                st.session_state.result = '장애물에 부딪혔습니다!'
+                failed = True
+                break
+            pos = new_pos
+        elif "회전" in cmd:
+            direction = rotate(direction, cmd)
+        elif cmd == "집기":
+            if pos in st.session_state.goals:
+                visited_goals.add(pos)
+        # 귀신 이동
+        ghost1 = move_ghost(ghost1, pos, st.session_state.obstacles, ignore_obstacles=("Level 5" in level))
+        ghost2 = move_ghost(ghost2, pos, st.session_state.obstacles, ignore_obstacles=("Level 5" in level))
+        ghost_path.append(ghost1)
+        ghost_path.append(ghost2)
+        if pos == ghost1 or pos == ghost2:
+            st.session_state.result = '귀신에게 잡혔습니다!'
+            failed = True
+            break
 
-        grid[x][y] = direction_symbols[direction]
+    if not failed:
+        st.session_state.score = len(visited_goals) * LEVELS[level]['score']
+        st.session_state.total_score += st.session_state.score
+        st.session_state.high_score = max(st.session_state.high_score, st.session_state.score)
+        st.session_state.result = f"{len(visited_goals)}개 목표 도달! 🎉 점수: {st.session_state.score}"
+        # Perfect 체크
+        shortest = bfs_shortest_path(st.session_state.start, st.session_state.goals, st.session_state.obstacles)
+        if len(shortest) + shortest.count('집기') == len(commands.strip().split('\n')) and len(visited_goals) == 2:
+            st.session_state.result += "\n🌟 Perfect!"
 
-    success = len(reached_goals) == len(goal_positions)
-    return grid, success, score, (x, y, direction)
+    st.session_state.commands = commands.strip().split('\n')
+    st.session_state.position = pos
+    st.session_state.direction = direction
+    st.session_state.ghost1 = ghost1
+    st.session_state.ghost2 = ghost2
+    st.session_state.ghost_path = ghost_path
 
-# UI
-st.title("🤖 로봇 퍼즐 게임 v2 - 다중 목표 & 다중 이동")
+# ----------------------------- 출력 ----------------------------- #
+st.markdown(f"**현재 점수:** {st.session_state.score} / **최고 점수:** {st.session_state.high_score} / **누적 점수:** {st.session_state.total_score}")
+st.markdown(f"**결과:** {st.session_state.result}")
 
-prev_level = st.session_state.get('prev_level', 1)
-level = st.selectbox("레벨 선택", [1, 2, 3], index=prev_level - 1, format_func=lambda x: f"Level {x}")
-if level != prev_level or 'grid' not in st.session_state:
-    st.session_state.grid, st.session_state.pos, st.session_state.dir, st.session_state.goals, st.session_state.obstacles = create_map(level)
-    st.session_state.prev_level = level
+# ----------------------------- 맵 출력 ----------------------------- #
+grid = ""
+for i in range(MAP_SIZE):
+    for j in range(MAP_SIZE):
+        cell = '⬜'
+        if (i, j) == st.session_state.position:
+            cell = '🤡' + DIRECTION_SYMBOLS[st.session_state.direction]  # 광대 + 방향 표시
+        elif (i, j) in st.session_state.obstacles:
+            cell = '⬛'
+        elif (i, j) in st.session_state.goals:
+            cell = '🎯'
+        elif (i, j) == st.session_state.ghost1:
+            cell = '👻'
+        elif (i, j) == st.session_state.ghost2:
+            cell = '💀'
+        elif (i, j) in st.session_state.ghost_path:
+            cell = '·'
+        grid += cell
+    grid += '\n'
+st.text(grid)
+
+if st.button("다시 시작"):
+    st.session_state.start, st.session_state.obstacles, st.session_state.goals, st.session_state.ghost1, st.session_state.ghost2 = generate_map(LEVELS[st.session_state.level]['obstacles'])
+    st.session_state.direction = 'UP'
+    st.session_state.position = st.session_state.start
+    st.session_state.commands = []
     st.session_state.score = 0
-
-if st.button("🔁 게임 다시 시작"):
-    st.session_state.grid, st.session_state.pos, st.session_state.dir, st.session_state.goals, st.session_state.obstacles = create_map(level)
-    st.session_state.score = 0
-
-st.markdown(f"### 🧮 현재 점수: {st.session_state.score}")
-st.markdown(f"### 🏆 최고 점수: {st.session_state.max_score}")
-st.markdown(f"### 📊 누적 점수: {st.session_state.total_score}")
-
-render_grid(st.session_state.grid)
-
-commands_input = st.text_area("명령어 입력 (예: 앞으로 2, 오른쪽 회전, 집기)", height=150)
-commands = [line.strip() for line in commands_input.strip().split('\n') if line.strip()]
-
-if st.button("명령어 실행"):
-    start_time = time.time()
-    st.write("⏱ 15초 제한 - 명령 실행 중...")
-    grid, success, delta_score, final_state = move_robot(
-        st.session_state.grid,
-        st.session_state.pos,
-        st.session_state.dir,
-        commands,
-        st.session_state.goals,
-        st.session_state.obstacles,
-        level
-    )
-    elapsed = time.time() - start_time
-
-    if elapsed > 15:
-        st.error(f"⏰ 제한 시간 초과! ({elapsed:.2f}초)")
-        delta_score = 0
-        success = False
-    else:
-        st.success(f"✅ 명령어 처리 완료 ({elapsed:.2f}초)")
-
-    st.session_state.score += delta_score
-    st.session_state.total_score += delta_score
-    if st.session_state.score > st.session_state.max_score:
-        st.session_state.max_score = st.session_state.score
-
-    x, y, d = final_state
-    grid[x][y] = direction_symbols[d]
-    st.session_state.grid = grid
-
-    st.markdown(f"### 🧮 현재 점수: {st.session_state.score}")
-    st.markdown(f"### 🏆 최고 점수: {st.session_state.max_score}")
-    st.markdown(f"### 📊 누적 점수: {st.session_state.total_score}")
-    render_grid(grid)
-
-    if success:
-        st.success("🎯 목표 2개 모두 도달 성공!")
-    else:
-        st.info("🎯 모든 목표에 도달하지 못했습니다.")
-
-    st.session_state.score_log.append({
-        "레벨": level,
-        "점수": st.session_state.score,
-        "누적점수": st.session_state.total_score,
-        "성공여부": "성공" if success else "실패",
-        "시간(초)": round(elapsed, 2)
-    })
-
-if st.button("💾 점수 기록 저장"):
-    df = pd.DataFrame(st.session_state.score_log)
-    st.download_button(
-        label="CSV 파일 다운로드",
-        data=df.to_csv(index=False).encode('utf-8-sig'),
-        file_name="robot_score_log.csv",
-        mime='text/csv'
-    )
+    st.session_state.result = ''
+    st.session_state.ghost_path = []
