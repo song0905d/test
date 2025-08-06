@@ -1,4 +1,3 @@
-나의 말:
 import streamlit as st
 import random
 import time
