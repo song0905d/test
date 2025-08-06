@@ -103,7 +103,6 @@ def draw_grid(position, direction, ghost, ghost_path, obstacles, goals, portals)
 # ----------------------------- 실행 ----------------------------- #
 st.title("🤖 로봇 명령 퍼즐 게임")
 
-
 st.markdown(
     """
     <audio autoplay loop>
@@ -117,8 +116,9 @@ if 'state' not in st.session_state:
     default_level = list(LEVELS.keys())[0]
     level_info = LEVELS[default_level]
     start, obstacles, goals, portals = generate_map(level_info['obstacles'], use_portals=level_info.get('portals', False))
-    ghost_range = level_info.get('ghost_range', 0)
-    ghost = (min(MAP_SIZE - 1, start[0] + ghost_range), start[1]) if level_info['ghost'] else None
+    ghost = None
+    if level_info['ghost']:
+        ghost = (min(MAP_SIZE - 1, start[0] + level_info['ghost_range']), start[1])
     st.session_state.state = {
         'level': default_level,
         'start': start,
@@ -135,13 +135,15 @@ if 'state' not in st.session_state:
         'result': '',
         'commands': []
     }
+    st.session_state['command_input'] = ""
 
 selected_level = st.selectbox("레벨 선택", list(LEVELS.keys()))
 if selected_level != st.session_state.state['level']:
     level_info = LEVELS[selected_level]
     start, obstacles, goals, portals = generate_map(level_info['obstacles'], use_portals=level_info.get('portals', False))
-    ghost_range = level_info.get('ghost_range', 0)
-    ghost = (min(MAP_SIZE - 1, start[0] + ghost_range), start[1]) if level_info['ghost'] else None
+    ghost = None
+    if level_info['ghost']:
+        ghost = (min(MAP_SIZE - 1, start[0] + level_info['ghost_range']), start[1])
     st.session_state.state.update({
         'level': selected_level,
         'start': start,
@@ -155,8 +157,10 @@ if selected_level != st.session_state.state['level']:
         'result': '',
         'commands': []
     })
+    st.session_state['command_input'] = ""
 
-commands = st.text_area("명령어 입력(한줄에 명령어 하나씩)")
+commands = st.text_area("명령어 입력(한줄에 명령어 하나씩)", value=st.session_state.get('command_input', ''))
+
 if st.button("실행"):
     s = st.session_state.state
     pos = s['position']
@@ -170,7 +174,7 @@ if st.button("실행"):
     for cmd in command_list:
         if cmd.startswith("앞으로"):
             steps = int(cmd.split()[1]) if len(cmd.split()) > 1 else 1
-            for step in range(steps):
+            for _ in range(steps):
                 temp_pos = move_forward(pos, direction, 1)
                 if temp_pos is None or temp_pos in s['obstacles']:
                     s['result'] = '❌ 장애물 충돌 또는 벽 밖으로 벗어남'
@@ -223,6 +227,7 @@ if st.button("실행"):
         'ghost_path': ghost_path,
         'commands': command_list
     })
+    st.session_state['command_input'] = '\n'.join(command_list)
 
 st.markdown(f"**현재 점수:** {st.session_state.state['score']} / **최고 점수:** {st.session_state.state['high_score']} / **누적 점수:** {st.session_state.state['total_score']}")
 st.markdown(f"**결과:** {st.session_state.state['result']}")
@@ -240,8 +245,9 @@ draw_grid(
 if st.button("🔁 다시 시작"):
     level_info = LEVELS[st.session_state.state['level']]
     start, obstacles, goals, portals = generate_map(level_info['obstacles'], use_portals=level_info.get('portals', False))
-    ghost_range = level_info.get('ghost_range', 0)
-    ghost = (min(MAP_SIZE - 1, start[0] + ghost_range), start[1]) if level_info['ghost'] else None
+    ghost = None
+    if level_info['ghost']:
+        ghost = (min(MAP_SIZE - 1, start[0] + level_info['ghost_range']), start[1])
     st.session_state.state.update({
         'start': start,
         'position': start,
@@ -254,9 +260,8 @@ if st.button("🔁 다시 시작"):
         'result': '',
         'commands': []
     })
+    st.session_state['command_input'] = ""
 
-
-# 설명
 with st.expander("📘 게임 설명 보기"):
     st.markdown("""
     ### 🎮 게임 방법
@@ -287,4 +292,7 @@ with st.expander("📘 게임 설명 보기"):
     - Level 3 (20점, 매운맛): 장애물 20개, 귀신 없음
     - Level 4 (30점, 불닭맛): 장애물 22개, 귀신 1명
     - Level 5 (50점, 핵불닭맛): 장애물 25개, 귀신 1명, 포탈 2개
-    """) 
+
+    -오류 발견시 문의
+    """)
+
