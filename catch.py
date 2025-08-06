@@ -385,3 +385,4 @@ if st.button("\U0001f9e0 AI 힌트 보기 (-30점)"):
             ai_commands = path_to_commands([s['position']] + path, s['direction'])
             st.info("**AI 추천 명령어:**\n\n" + '\n'.join(ai_commands))
 
+ 
