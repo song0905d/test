@@ -163,6 +163,7 @@ if 'state' not in st.session_state:
             'result': '',
             'commands': []
         }
+
     reset_game(list(LEVELS.keys())[0])
 
 selected_level = st.selectbox("레벨 선택", list(LEVELS.keys()))
