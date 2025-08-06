@@ -8,8 +8,15 @@ direction_symbols = ['↑', '→', '↓', '←']
 dx = [-1, 0, 1, 0]
 dy = [0, 1, 0, -1]
 
+# 상태 초기화
 if 'score_log' not in st.session_state:
     st.session_state.score_log = []
+if 'score' not in st.session_state:
+    st.session_state.score = 0
+if 'max_score' not in st.session_state:
+    st.session_state.max_score = 0
+if 'total_score' not in st.session_state:
+    st.session_state.total_score = 0
 
 # 맵 생성 함수
 def create_map(level):
@@ -27,7 +34,7 @@ def create_map(level):
     all_positions.remove(goal2)
 
     base_obstacles = {1: 5, 2: 10, 3: 15}
-    num_obstacles = base_obstacles.get(level, 5) + 4  # +4 장애물
+    num_obstacles = base_obstacles.get(level, 5) + 4
 
     obstacle_pos = random.sample(all_positions, num_obstacles)
 
@@ -47,7 +54,7 @@ def render_grid(grid):
     for row in grid:
         st.markdown(''.join(row))
 
-# 명령어 해석 및 실행
+# 명령어 처리 함수
 def move_robot(grid, pos, direction, commands, goal_positions, obstacles, level):
     x, y = pos
     size = len(grid)
@@ -88,18 +95,16 @@ def move_robot(grid, pos, direction, commands, goal_positions, obstacles, level)
 # UI
 st.title("🤖 로봇 퍼즐 게임 v2 - 다중 목표 & 다중 이동")
 
-level = st.selectbox("레벨 선택", [1, 2, 3], format_func=lambda x: f"Level {x}")
+prev_level = st.session_state.get('prev_level', 1)
+level = st.selectbox("레벨 선택", [1, 2, 3], index=prev_level - 1, format_func=lambda x: f"Level {x}")
+if level != prev_level or 'grid' not in st.session_state:
+    st.session_state.grid, st.session_state.pos, st.session_state.dir, st.session_state.goals, st.session_state.obstacles = create_map(level)
+    st.session_state.prev_level = level
+    st.session_state.score = 0
 
 if st.button("🔁 게임 다시 시작"):
     st.session_state.grid, st.session_state.pos, st.session_state.dir, st.session_state.goals, st.session_state.obstacles = create_map(level)
     st.session_state.score = 0
-
-# 최초 실행 시 초기화
-if 'grid' not in st.session_state:
-    st.session_state.grid, st.session_state.pos, st.session_state.dir, st.session_state.goals, st.session_state.obstacles = create_map(level)
-    st.session_state.score = 0
-    st.session_state.max_score = 0
-    st.session_state.total_score = 0
 
 st.markdown(f"### 🧮 현재 점수: {st.session_state.score}")
 st.markdown(f"### 🏆 최고 점수: {st.session_state.max_score}")
@@ -158,7 +163,6 @@ if st.button("명령어 실행"):
         "시간(초)": round(elapsed, 2)
     })
 
-# 점수 저장
 if st.button("💾 점수 기록 저장"):
     df = pd.DataFrame(st.session_state.score_log)
     st.download_button(
