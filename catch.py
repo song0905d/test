@@ -163,7 +163,6 @@ if st.button("실행"):
     ghost_path = []
     visited_goals = set()
     failed = False
-    cmds = commands.strip().split('\n')
 
     command_list = commands.strip().split('\n')
     for cmd in command_list:
