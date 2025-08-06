@@ -219,6 +219,18 @@ if st.button("🔁 다시 시작"):
         'commands': []
     })
 
+# draw_grid 호출을 실행 버튼 바깥에서도 하도록 아래 추가
+draw_grid(
+    st.session_state.state['position'],
+    st.session_state.state['direction'],
+    st.session_state.state['ghost'],
+    st.session_state.state['ghost_path'],
+    st.session_state.state['obstacles'],
+    st.session_state.state['goals'],
+    st.session_state.state['portals']
+)
+
+
 # 랭킹 저장 / 보기
 if st.session_state.state['score'] > 0:
     name = st.text_input("이름을 입력하세요 (랭킹 저장)", key="name_input")
