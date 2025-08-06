@@ -340,6 +340,23 @@ def path_to_commands(path, initial_direction='UP'):
     commands.append("집기")
     return commands
 
+# 명령어 자동완성 버튼
+if st.button("\U0001f504 명령어 자동완성"):
+    example_commands = [
+        "앞으로 2",
+        "오른쪽 회전",
+        "앞으로 3",
+        "왼쪽 회전",
+        "앞으로",
+        "집기"
+    ]
+    st.session_state["command_input"] = '\n'.join(example_commands)
+
+# 명령어 입력창 (자동완성과 연동)
+commands = st.text_area("명령어 입력(한줄에 명령어 하나씩)",
+                        value=st.session_state.get("command_input", ""),
+                        key="command_input")
+
 # AI 힌트 버튼 처리
 if st.button("\U0001f9e0 AI 힌트 보기 (-30점)"):
     s = st.session_state.state
