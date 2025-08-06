@@ -145,7 +145,7 @@ if sel != st.session_state.game['level']:
     })
 
 # 명령 실행
-cmd_input = st.text_area("명령어 입력 (줄바꿈)")
+cmd_input = st.text_area("명령어 입력")
 if st.button("실행"):
     g = st.session_state.game
     pos, dir, ghost = g['start'], 'UP', g['ghost']
