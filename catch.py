@@ -1,5 +1,3 @@
-정된 Streamlit 코드 (레벨 6, 맵 고정, 명령어 입력창 초기화 포함)
-
 import streamlit as st
 import random
 import time
