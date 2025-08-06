@@ -360,4 +360,12 @@ if st.button("\U0001f9e0 AI 힌트 보기 (-30점)"):
             ai_commands = path_to_commands([s['position']] + path, s['direction'])
             st.info("**AI 추천 명령어:**\n\n" + '\n'.join(ai_commands))
 
-
+# 명령어 자동완성 버튼
+if st.button("\U0001f504 명령어 자동완성"):
+    example_commands = [
+        "앞으로 2",
+        "오른쪽 회전",
+        "앞으로 3",
+        "왼쪽 회전",
+        "앞으로",
+        "집기"
