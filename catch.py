@@ -11,8 +11,8 @@ LEVELS = {
     "Level 1 (5점, 착한맛)": {"obstacles": 8, "score": 5, "ghost": False},
     "Level 2 (10점, 보통맛)": {"obstacles": 14, "score": 10, "ghost": False},
     "Level 3 (20점, 매운맛)": {"obstacles": 20, "score": 20, "ghost": False},
-    "Level 4 (30점, 불닭맛)": {"obstacles": 22, "score": 30, "ghost": True, "ghost_range": 5, "ignore_obstacles": False},
-    "Level 5 (50점, 핵불닭맛)": {"obstacles": 25, "score": 50, "ghost": True, "ghost_range": 4, "ignore_obstacles": True, "portals": True},
+    "Level 4 (30점, 불닭맛)": {"obstacles": 24, "score": 30, "ghost": True, "ghost_range": 4, "ignore_obstacles": False},
+    "Level 5 (50점, 핵불닭맛)": {"obstacles": 28, "score": 50, "ghost": True, "ghost_range": 3, "ignore_obstacles": True, "portals": True},
 }
 MAP_SIZE = 9
 PORTAL_SYMBOL = '🌀'
@@ -291,8 +291,8 @@ with st.expander("📘 게임 설명 보기"):
     - Level 1 (5점, 착한맛): 장애물 8개, 귀신 없음
     - Level 2 (10점, 보통맛): 장애물 14개, 귀신 없음
     - Level 3 (20점, 매운맛): 장애물 20개, 귀신 없음
-    - Level 4 (30점, 불닭맛): 장애물 22개, 귀신 1명
-    - Level 5 (50점, 핵불닭맛): 장애물 25개, 귀신 1명, 포탈 2개
+    - Level 4 (30점, 불닭맛): 장애물 24개, 귀신 1명
+    - Level 5 (50점, 핵불닭맛): 장애물 28개, 귀신 1명, 포탈 2개
 
     -오류 발견시 문의
     """)
@@ -308,5 +308,56 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
+def path_to_commands(path, initial_direction='UP'):
+    commands = []
+    direction = initial_direction
+
+    for i in range(1, len(path)):
+        cur = path[i - 1]
+        nxt = path[i]
+        dx, dy = nxt[0] - cur[0], nxt[1] - cur[1]
+
+        # 이동 방향 계산
+        for dir_name, (dx_offset, dy_offset) in MOVE_OFFSET.items():
+            if (dx, dy) == (dx_offset, dy_offset):
+                target_dir = dir_name
+                break
+
+        # 방향 회전 처리
+        while direction != target_dir:
+            cur_idx = DIRECTIONS.index(direction)
+            target_idx = DIRECTIONS.index(target_dir)
+            if (target_idx - cur_idx) % 4 == 1:
+                commands.append("오른쪽 회전")
+                direction = rotate(direction, "오른쪽 회전")
+            else:
+                commands.append("왼쪽 회전")
+                direction = rotate(direction, "왼쪽 회전")
+
+        commands.append("앞으로")
+
+    commands.append("집기")
+    return commands
+
+# AI 힌트 버튼 처리
+if st.button("\U0001f9e0 AI 힌트 보기 (-30점)"):
+    s = st.session_state.state
+
+    if s['total_score'] < 30:
+        st.warning("포인트가 부족합니다! 최소 30점 이상 필요해요.")
+    else:
+        path = None
+        for goal in s['goals']:
+            path = bfs_shortest_path(s['position'], [goal], s['obstacles'])
+            if path:
+                break
+
+        if not path:
+            st.error("경로를 찾을 수 없습니다.")
+        else:
+            s['total_score'] -= 30
+            ai_commands = path_to_commands([s['position']] + path, s['direction'])
+            st.info("**AI 추천 명령어:**\n\n" + '\n'.join(ai_commands))
 
 
