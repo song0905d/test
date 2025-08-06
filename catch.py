@@ -107,7 +107,6 @@ Your browser does not support the audio element.
 </audio>
 """, unsafe_allow_html=True)
 
-    
     level = st.selectbox("레벨 선택", list(LEVELS.keys()), index=list(LEVELS.keys()).index(st.session_state.level))
     if level != st.session_state.level:
         st.session_state.level = level
