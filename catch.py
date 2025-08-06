@@ -15,21 +15,25 @@ LEVELS = {
     "Level 4 (30점, 불닭맛)": {"obstacles": 22, "score": 30},
     "Level 5 (50점, 핵불닭맛)": {"obstacles": 25, "score": 50},
 }
-MAP_SIZE = 8
+MAP_SIZE = 9  # 한 칸 늘림
 
 # ----------------------------- 함수 ----------------------------- #
 def generate_map(obstacle_count, goal_count=2):
-    positions = [(i, j) for i in range(MAP_SIZE) for j in range(MAP_SIZE)]
-    start = random.choice(positions)
-    positions.remove(start)
+    while True:
+        positions = [(i, j) for i in range(MAP_SIZE) for j in range(MAP_SIZE)]
+        start = random.choice(positions)
+        positions.remove(start)
 
-    obstacles = set(random.sample(positions, obstacle_count))
-    for ob in obstacles:
-        positions.remove(ob)
+        obstacles = set(random.sample(positions, obstacle_count))
+        for ob in obstacles:
+            if ob in positions:
+                positions.remove(ob)
 
-    goals = random.sample(positions, goal_count)
-    for goal in goals:
-        positions.remove(goal)
+        goals = random.sample(positions, goal_count)
+
+        # 목표 지점이 모두 접근 가능해야 함
+        if all(bfs_shortest_path(start, [goal], obstacles) for goal in goals):
+            break
 
     ghost1 = (max(0, start[0]-5), start[1])
     ghost2 = (min(MAP_SIZE-1, start[0]+3), start[1])
@@ -78,7 +82,31 @@ def bfs_shortest_path(start, goals, obstacles):
                 queue.append((new, path + [new]))
     return []
 
-# ----------------------------- 초기화 ----------------------------- #
+def draw_grid(position, direction, ghost1, ghost2, ghost_path, obstacles, goals):
+    grid = ""
+    for i in range(MAP_SIZE):
+        for j in range(MAP_SIZE):
+            cell = '⬜'
+            if (i, j) == position:
+                cell = '🤡' + DIRECTION_SYMBOLS[direction]
+            elif (i, j) in obstacles:
+                cell = '⬛'
+            elif (i, j) in goals:
+                cell = '🎯'
+            elif (i, j) == ghost1:
+                cell = '👻'
+            elif (i, j) == ghost2:
+                cell = '💀'
+            elif (i, j) in ghost_path:
+                cell = '·'
+            grid += cell
+        grid += '\n'
+    st.text(grid)
+
+# ----------------------------- 실행 ----------------------------- #
+st.title("🤖 로봇 명령 퍼즐 게임")
+st.markdown("명령어 예시: 앞으로, 앞으로 2, 앞으로 3, 왼쪽 회전, 오른쪽 회전, 집기")
+
 if 'level' not in st.session_state:
     st.session_state.level = list(LEVELS.keys())[0]
     st.session_state.start, st.session_state.obstacles, st.session_state.goals, st.session_state.ghost1, st.session_state.ghost2 = generate_map(LEVELS[st.session_state.level]['obstacles'])
@@ -91,7 +119,6 @@ if 'level' not in st.session_state:
     st.session_state.result = ''
     st.session_state.ghost_path = []
 
-# ----------------------------- 레벨 선택 ----------------------------- #
 level = st.selectbox("레벨 선택", list(LEVELS.keys()))
 if level != st.session_state.level:
     st.session_state.level = level
@@ -102,11 +129,7 @@ if level != st.session_state.level:
     st.session_state.result = ''
     st.session_state.ghost_path = []
 
-# ----------------------------- UI ----------------------------- #
-st.title("🤖 로봇 명령 퍼즐 게임")
-st.markdown("명령어 예시: 앞으로, 앞으로 2, 앞으로 3, 왼쪽 회전, 오른쪽 회전, 집기")
 commands = st.text_area("명령어 입력 (줄바꿈으로 분리)")
-
 if st.button("실행"):
     pos = st.session_state.start
     direction = 'UP'
@@ -115,7 +138,9 @@ if st.button("실행"):
     ghost_path = []
     visited_goals = set()
     failed = False
-    for cmd in commands.strip().split('\n'):
+    command_list = commands.strip().split('\n')
+    for cmd in command_list:
+        st.write(f"➡️ 명령어 실행: `{cmd}`")
         cmd = cmd.strip()
         if cmd.startswith("앞으로"):
             parts = cmd.split()
@@ -140,48 +165,30 @@ if st.button("실행"):
             st.session_state.result = '귀신에게 잡혔습니다!'
             failed = True
             break
+        draw_grid(pos, direction, ghost1, ghost2, ghost_path, st.session_state.obstacles, st.session_state.goals)
+        time.sleep(0.5)
 
     if not failed:
         st.session_state.score = len(visited_goals) * LEVELS[level]['score']
         st.session_state.total_score += st.session_state.score
         st.session_state.high_score = max(st.session_state.high_score, st.session_state.score)
         st.session_state.result = f"{len(visited_goals)}개 목표 도달! 🎉 점수: {st.session_state.score}"
-        # Perfect 체크
+
         shortest = bfs_shortest_path(st.session_state.start, st.session_state.goals, st.session_state.obstacles)
-        if len(shortest) + shortest.count('집기') == len(commands.strip().split('\n')) and len(visited_goals) == 2:
+        if len(shortest) + shortest.count('집기') == len(command_list) and len(visited_goals) == 2:
             st.session_state.result += "\n🌟 Perfect!"
 
-    st.session_state.commands = commands.strip().split('\n')
+    st.session_state.commands = command_list
     st.session_state.position = pos
     st.session_state.direction = direction
     st.session_state.ghost1 = ghost1
     st.session_state.ghost2 = ghost2
     st.session_state.ghost_path = ghost_path
 
-# ----------------------------- 출력 ----------------------------- #
 st.markdown(f"**현재 점수:** {st.session_state.score} / **최고 점수:** {st.session_state.high_score} / **누적 점수:** {st.session_state.total_score}")
 st.markdown(f"**결과:** {st.session_state.result}")
 
-# ----------------------------- 맵 출력 ----------------------------- #
-grid = ""
-for i in range(MAP_SIZE):
-    for j in range(MAP_SIZE):
-        cell = '⬜'
-        if (i, j) == st.session_state.position:
-            cell = '🤡' + DIRECTION_SYMBOLS[st.session_state.direction]  # 광대 + 방향 표시
-        elif (i, j) in st.session_state.obstacles:
-            cell = '⬛'
-        elif (i, j) in st.session_state.goals:
-            cell = '🎯'
-        elif (i, j) == st.session_state.ghost1:
-            cell = '👻'
-        elif (i, j) == st.session_state.ghost2:
-            cell = '💀'
-        elif (i, j) in st.session_state.ghost_path:
-            cell = '·'
-        grid += cell
-    grid += '\n'
-st.text(grid)
+draw_grid(st.session_state.position, st.session_state.direction, st.session_state.ghost1, st.session_state.ghost2, st.session_state.ghost_path, st.session_state.obstacles, st.session_state.goals)
 
 if st.button("다시 시작"):
     st.session_state.start, st.session_state.obstacles, st.session_state.goals, st.session_state.ghost1, st.session_state.ghost2 = generate_map(LEVELS[st.session_state.level]['obstacles'])
