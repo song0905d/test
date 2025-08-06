@@ -85,7 +85,7 @@ def draw_grid(position, direction, ghost, ghost_path, obstacles, goals, portals)
         for j in range(MAP_SIZE):
             cell = '⬜'
             if (i, j) == position:
-                cell = '🤡' + DIRECTION_SYMBOLS[direction]
+                cell = '🤡'
             elif (i, j) in obstacles:
                 cell = '⬛'
             elif (i, j) in goals:
