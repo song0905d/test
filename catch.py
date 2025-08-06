@@ -18,10 +18,9 @@ LEVELS = {
     "Level 3 (20점, 매운맛)": {"obstacles": 20, "score": 20, "ghost": False},
     "Level 4 (30점, 불닭맛)": {"obstacles": 22, "score": 30, "ghost": True, "ghost_range": 7, "ignore_obstacles": False},
     "Level 5 (50점, 핵불닭맛)": {"obstacles": 25, "score": 50, "ghost": True, "ghost_range": 5, "ignore_obstacles": True, "portals": True},
-    "Level 6 (100점, 미친맛)": {"obstacles": 30, "score": 100, "ghost": True, "ghost_range": 1, "ignore_obstacles": True, "portals": True, "ghost_count": 2},
 }
 
-# ---------------- DB 초기화 ---------------- #
+# ---------------- 랭킹 DB ---------------- #
 def init_ranking_db():
     conn = sqlite3.connect("ranking.db")
     c = conn.cursor()
@@ -39,10 +38,12 @@ def init_ranking_db():
 def save_score(name, score, level):
     conn = sqlite3.connect("ranking.db")
     c = conn.cursor()
-    c.execute("INSERT INTO ranking VALUES (?, ?, ?, ?)", (name, score, level, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    c.execute("INSERT INTO ranking VALUES (?, ?, ?, ?)",
+              (name, score, level, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     conn.commit()
     conn.close()
-    def load_ranking():
+
+def load_ranking():
     conn = sqlite3.connect("ranking.db")
     c = conn.cursor()
     c.execute("SELECT name, score, level, timestamp FROM ranking ORDER BY score DESC LIMIT 10")
@@ -50,6 +51,7 @@ def save_score(name, score, level):
     conn.close()
     return rows
 
+# ---------------- 게임 기능 ---------------- #
 def generate_map(obstacle_count, goal_count=2, use_portals=False):
     while True:
         positions = [(i, j) for i in range(MAP_SIZE) for j in range(MAP_SIZE)]
@@ -87,6 +89,7 @@ def move_ghost(pos, target, obstacles, ignore_obstacles=False):
             if ignore_obstacles or opt not in obstacles:
                 return opt
     return pos
+
 def bfs_shortest_path(start, goals, obstacles):
     queue = deque([(start, [])])
     visited = {start}
@@ -102,7 +105,7 @@ def bfs_shortest_path(start, goals, obstacles):
                 queue.append((next_pos, path + [next_pos]))
     return []
 
-def draw_grid(position, direction, ghosts, ghost_path, obstacles, goals, portals):
+def draw_grid(position, direction, ghost, ghost_path, obstacles, goals, portals):
     grid = ""
     for i in range(MAP_SIZE):
         for j in range(MAP_SIZE):
@@ -113,7 +116,7 @@ def draw_grid(position, direction, ghosts, ghost_path, obstacles, goals, portals
                 cell = '⬛'
             elif (i, j) in goals:
                 cell = '🎯'
-            elif (i, j) in ghosts:
+            elif (i, j) == ghost:
                 cell = '👻'
             elif (i, j) in ghost_path:
                 cell = '·'
@@ -123,17 +126,41 @@ def draw_grid(position, direction, ghosts, ghost_path, obstacles, goals, portals
         grid += '\n'
     st.text(grid)
 
-# ---------------- 상태 초기화 ---------------- #
-def reset_state(selected_level):
+# ---------------- UI & 게임 루프 ---------------- #
+init_ranking_db()
+st.title("🤖 로봇 명령 퍼즐 게임")
+
+if "state" not in st.session_state:
+    default_level = list(LEVELS.keys())[0]
+    info = LEVELS[default_level]
+    start, obstacles, goals, portals = generate_map(info["obstacles"], use_portals=info.get("portals", False))
+    ghost_range = info.get("ghost_range", 0)
+    ghost = (min(MAP_SIZE - 1, start[0] + ghost_range), start[1]) if info.get("ghost") else None
+    st.session_state.state = {
+        "level": default_level,
+        "start": start,
+        "obstacles": obstacles,
+        "goals": goals,
+        "portals": portals,
+        "position": start,
+        "direction": "UP",
+        "ghost": ghost,
+        "ghost_path": [],
+        "score": 0,
+        "high_score": 0,
+        "total_score": 0,
+        "result": "",
+    }
+    st.session_state.commands_input = ""
+
+# 레벨 선택
+selected_level = st.selectbox("레벨 선택", list(LEVELS.keys()))
+if selected_level != st.session_state.state["level"]:
     info = LEVELS[selected_level]
     start, obstacles, goals, portals = generate_map(info["obstacles"], use_portals=info.get("portals", False))
     ghost_range = info.get("ghost_range", 0)
-    ghosts = []
-    if info.get("ghost"):
-        ghosts.append((min(MAP_SIZE - 1, start[0] + ghost_range), start[1]))
-        if selected_level == "Level 6 (100점, 극한맛)":
-            ghosts.append((max(0, start[0] - ghost_range), start[1]))
-    return {
+    ghost = (min(MAP_SIZE - 1, start[0] + ghost_range), start[1]) if info.get("ghost") else None
+    st.session_state.state.update({
         "level": selected_level,
         "start": start,
         "obstacles": obstacles,
@@ -141,41 +168,20 @@ def reset_state(selected_level):
         "portals": portals,
         "position": start,
         "direction": "UP",
-        "ghosts": ghosts,
+        "ghost": ghost,
         "ghost_path": [],
         "score": 0,
-        "high_score": 0,
-        "total_score": 0,
-        "result": "",
-    }
-# ---------------- Streamlit 시작 ---------------- #
-init_ranking_db()
-st.title("🤖 로봇 명령 퍼즐 게임")
-st.markdown(
-    """<audio autoplay loop>
-    <source src="https://www.bensound.com/bensound-music/bensound-littleidea.mp3" type="audio/mpeg">
-    </audio>""",
-    unsafe_allow_html=True
-)
-
-if "state" not in st.session_state:
-    selected_level = list(LEVELS.keys())[0]
-    st.session_state.state = reset_state(selected_level)
+        "result": ""
+    })
     st.session_state.commands_input = ""
 
-# ---------------- 레벨 선택 ---------------- #
-selected_level = st.selectbox("레벨 선택", list(LEVELS.keys()), index=list(LEVELS.keys()).index(st.session_state.state["level"]))
-if selected_level != st.session_state.state["level"]:
-    st.session_state.state = reset_state(selected_level)
-    st.session_state.commands_input = ""
-
-# ---------------- 명령어 입력 ---------------- #
-commands = st.text_area("명령어 입력", value=st.session_state.commands_input, key="command_area")
+# 명령어 입력
+commands = st.text_area("명령어 입력", value=st.session_state.commands_input, key="commands_input")
 if st.button("실행"):
     s = st.session_state.state
     pos = s["position"]
     direction = s["direction"]
-    ghosts = s["ghosts"]
+    ghost = s["ghost"]
     ghost_path = []
     goals_reached = set()
     failed = False
@@ -196,17 +202,15 @@ if st.button("실행"):
             goals_reached.add(pos)
         if failed:
             break
-        new_ghosts = []
-        for ghost in ghosts:
-            moved = move_ghost(ghost, pos, s["obstacles"], LEVELS[s["level"]].get("ignore_obstacles", False))
-            if moved == pos:
+        if ghost:
+            ghost = move_ghost(ghost, pos, s["obstacles"], LEVELS[s["level"]].get("ignore_obstacles", False))
+            ghost_path.append(ghost)
+            if pos == ghost:
                 s["result"] = "👻 귀신에게 잡힘!"
                 failed = True
-            new_ghosts.append(moved)
-            ghost_path.append(moved)
-        ghosts = new_ghosts
-        draw_grid(pos, direction, ghosts, ghost_path, s["obstacles"], s["goals"], s["portals"])
-        time.sleep(0.15)
+                break
+        draw_grid(pos, direction, ghost, ghost_path, s["obstacles"], s["goals"], s["portals"])
+        time.sleep(0.2)
 
     if not failed:
         score = len(goals_reached) * LEVELS[s["level"]]["score"]
@@ -218,20 +222,28 @@ if st.button("실행"):
         if len(commands.strip().split('\n')) == len(shortest) + 2 and len(goals_reached) == 2:
             s["result"] += "\n🌟 Perfect!"
 
-    s.update({"position": pos, "direction": direction, "ghosts": ghosts, "ghost_path": ghost_path})
+    s.update({"position": pos, "direction": direction, "ghost": ghost, "ghost_path": ghost_path})
     st.session_state.commands_input = ""
-# ---------------- 결과 출력 ---------------- #
+
+# 상태 출력
 s = st.session_state.state
 st.markdown(f"**현재 점수:** {s['score']} / **최고 점수:** {s['high_score']} / **누적 점수:** {s['total_score']}")
 st.markdown(f"**결과:** {s['result']}")
-draw_grid(s["position"], s["direction"], s["ghosts"], s["ghost_path"], s["obstacles"], s["goals"], s["portals"])
+draw_grid(s["position"], s["direction"], s["ghost"], s["ghost_path"], s["obstacles"], s["goals"], s["portals"])
 
-# ---------------- 다시 시작 ---------------- #
+# 다시 시작 버튼
 if st.button("🔁 다시 시작"):
-    st.session_state.state = reset_state(st.session_state.state["level"])
+    s.update({
+        "position": s["start"],
+        "direction": "UP",
+        "ghost": (min(MAP_SIZE - 1, s["start"][0] + LEVELS[s["level"]].get("ghost_range", 0)), s["start"][1]) if LEVELS[s["level"]].get("ghost") else None,
+        "ghost_path": [],
+        "score": 0,
+        "result": ""
+    })
     st.session_state.commands_input = ""
 
-# ---------------- 랭킹 등록 ---------------- #
+# 랭킹 등록
 if s["score"] > 0:
     name = st.text_input("랭킹 등록할 이름 입력")
     if name:
@@ -241,39 +253,3 @@ if s["score"] > 0:
 if st.button("🏆 랭킹 보기", key="ranking_btn"):
     for i, (n, sc, lv, ts) in enumerate(load_ranking(), 1):
         st.write(f"{i}위 | 이름: {n} | 점수: {sc} | 레벨: {lv} | 날짜: {ts}")
-
-# ---------------- 게임 설명 ---------------- #
-with st.expander("📘 게임 설명 보기"):
-    st.markdown("""
-    ### 🎮 게임 방법
-    로봇 🤡에게 명령어를 입력하여 두 개의 🎯 목표 지점을 방문하고 집기 명령으로 수집하세요!  
-    장애물(⬛)을 피하고, 귀신(👻)에게 잡히지 않도록 조심하세요!
-
-    ### ✏️ 사용 가능한 명령어
-    - 앞으로 : 한 칸 전진
-    - 앞으로 2, 앞으로 3 : 여러 칸 전진
-    - 왼쪽 회전 : 반시계 방향으로 90도 회전
-    - 오른쪽 회전 : 시계 방향으로 90도 회전
-    - 집기 : 현재 칸에 목표물이 있을 경우 수집
-
-    ### 🌀 포탈 (Level 5 이상)
-    - 포탈(🌀)에 들어가면 다른 포탈로 순간 이동!
-    - 귀신은 포탈을 사용할 수 없습니다.
-
-    ### 👻 귀신
-    - Level 4: 귀신 1마리 (장애물 피해 추적)
-    - Level 5: 귀신 1마리 (장애물 무시)
-    - Level 6: 귀신 2마리 (장애물 무시)
-
-    ### 🏆 Perfect 조건
-    - 최단 경로 이동 + 명령어 수 최소 + 목표 모두 수집 시 Perfect! 🌟
-
-    ### 🧱 레벨 구성
-    - Level 1 (5점, 착한맛): 장애물 8개, 귀신 없음
-    - Level 2 (10점, 보통맛): 장애물 14개, 귀신 없음
-    - Level 3 (20점, 매운맛): 장애물 20개, 귀신 없음
-    - Level 4 (30점, 불닭맛): 장애물 22개, 귀신 1명
-    - Level 5 (50점, 핵불닭맛): 장애물 25개, 귀신 1명, 포탈 2개
-    - Level 6 (100점, 마왕맛): 장애물 30개, 귀신 2명, 포탈 2개
-    """)
-
