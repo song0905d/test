@@ -296,5 +296,81 @@ with st.expander("📘 게임 설명 보기"):
     -오류 발견시 문의
     """)
 
-# 🔊 배경음악 삽입 (이미 위에서 했으므로 중복 제거)
+# 🔊 배경음악 삽입
+st.markdown(
+    """
+    <audio autoplay loop>
+        <source src="https://www.bensound.com/bensound-music/bensound-littleidea.mp3" type="audio/mpeg">
+    </audio>
+    """,
+    unsafe_allow_html=True
+)
 
+
+def path_to_commands(path, initial_direction='UP'):
+    commands = []
+    direction = initial_direction
+
+    for i in range(1, len(path)):
+        cur = path[i - 1]
+        nxt = path[i]
+        dx, dy = nxt[0] - cur[0], nxt[1] - cur[1]
+
+        # 이동 방향 계산
+        for dir_name, (dx_offset, dy_offset) in MOVE_OFFSET.items():
+            if (dx, dy) == (dx_offset, dy_offset):
+                target_dir = dir_name
+                break
+
+        # 방향 회전 처리
+        while direction != target_dir:
+            cur_idx = DIRECTIONS.index(direction)
+            target_idx = DIRECTIONS.index(target_dir)
+            if (target_idx - cur_idx) % 4 == 1:
+                commands.append("오른쪽 회전")
+                direction = rotate(direction, "오른쪽 회전")
+            else:
+                commands.append("왼쪽 회전")
+                direction = rotate(direction, "왼쪽 회전")
+
+        commands.append("앞으로")
+
+    commands.append("집기")
+    return commands
+
+# 명령어 자동완성 버튼
+if st.button("\U0001f504 명령어 자동완성"):
+    example_commands = [
+        "앞으로 2",
+        "오른쪽 회전",
+        "앞으로 3",
+        "왼쪽 회전",
+        "앞으로",
+        "집기"
+    ]
+    st.session_state["command_input"] = '\n'.join(example_commands)
+
+# 명령어 입력창 (자동완성과 연동)
+commands = st.text_area("명령어 입력(한줄에 명령어 하나씩)",
+                        value=st.session_state.get("command_input", ""),
+                        key="command_input")
+
+# AI 힌트 버튼 처리
+if st.button("\U0001f9e0 AI 힌트 보기 (-30점)"):
+    s = st.session_state.state
+
+    if s['total_score'] < 30:
+        st.warning("포인트가 부족합니다! 최소 30점 이상 필요해요.")
+    else:
+        path = None
+        for goal in s['goals']:
+            path = bfs_shortest_path(s['position'], [goal], s['obstacles'])
+            if path:
+                break
+
+        if not path:
+            st.error("경로를 찾을 수 없습니다.")
+        else:
+            s['total_score'] -= 30
+            ai_commands = path_to_commands([s['position']] + path, s['direction'])
+            st.info("**AI 추천 명령어:**\n\n" + '\n'.join(ai_commands))
