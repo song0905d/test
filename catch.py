@@ -157,7 +157,8 @@ if selected_level != st.session_state.state['level']:
         'result': '',
         'commands': []
     })
-    st.session_state['command_input'] = ""
+    st.session_state['command_input'] = ""  # 🔁 명령어창 초기화 추가
+
 
 commands = st.text_area("명령어 입력(한줄에 명령어 하나씩)", value=st.session_state.get('command_input', ''))
 
@@ -295,4 +296,17 @@ with st.expander("📘 게임 설명 보기"):
 
     -오류 발견시 문의
     """)
+
+st.title("🤖 로봇 명령 퍼즐 게임")
+
+# 🔊 배경음악 삽입
+st.markdown(
+    """
+    <audio autoplay loop>
+        <source src="https://www.bensound.com/bensound-music/bensound-littleidea.mp3" type="audio/mpeg">
+    </audio>
+    """,
+    unsafe_allow_html=True
+)
+
 
