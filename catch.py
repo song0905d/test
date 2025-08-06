@@ -1,255 +1,177 @@
+from textwrap import dedent
+
+full_code = dedent("""
 import streamlit as st
 import random
-import time
 import sqlite3
-from datetime import datetime
-from collections import deque
 
-# ---------------- 설정 ---------------- #
-DIRECTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT']
-DIRECTION_SYMBOLS = {'UP': '↑', 'RIGHT': '→', 'DOWN': '↓', 'LEFT': '←'}
-MOVE_OFFSET = {'UP': (-1, 0), 'DOWN': (1, 0), 'LEFT': (0, -1), 'RIGHT': (0, 1)}
-PORTAL_SYMBOL = '🌀'
-MAP_SIZE = 9
+# -------------------- 초기 설정 -------------------- #
+GRID_SIZE = 9
+DIRECTIONS = {'앞으로': (-1, 0), '뒤로': (1, 0), '왼쪽': (0, -1), '오른쪽': (0, 1)}
+DIRECTION_SYMBOLS = {'앞으로': '↑', '뒤로': '↓', '왼쪽': '←', '오른쪽': '→'}
 
 LEVELS = {
-    "Level 1 (5점, 착한맛)": {"obstacles": 8, "score": 5, "ghost": False},
-    "Level 2 (10점, 보통맛)": {"obstacles": 14, "score": 10, "ghost": False},
-    "Level 3 (20점, 매운맛)": {"obstacles": 20, "score": 20, "ghost": False},
-    "Level 4 (30점, 불닭맛)": {"obstacles": 22, "score": 30, "ghost": True, "ghost_range": 7, "ignore_obstacles": False},
-    "Level 5 (50점, 핵불닭맛)": {"obstacles": 25, "score": 50, "ghost": True, "ghost_range": 5, "ignore_obstacles": True, "portals": True},
+    "Level 1 (5점, 착한맛)": {"score": 5, "obstacles": 8, "ghost": False},
+    "Level 2 (10점, 보통맛)": {"score": 10, "obstacles": 14, "ghost": False},
+    "Level 3 (20점, 매운맛)": {"score": 20, "obstacles": 20, "ghost": False},
+    "Level 4 (30점, 불닭맛)": {"score": 30, "obstacles": 22, "ghost": True, "ghost_count": 1, "ghost_blocked": True, "ghost_nearby": False},
+    "Level 5 (50점, 핵불닭맛)": {"score": 50, "obstacles": 25, "ghost": True, "ghost_count": 1, "ghost_blocked": False, "ghost_nearby": False},
+    "Level 6 (100점, 헬맛)": {"score": 100, "obstacles": 28, "ghost": True, "ghost_count": 2, "ghost_blocked": False, "ghost_nearby": True}
 }
 
-# ---------------- 랭킹 DB ---------------- #
+# -------------------- DB 초기화 -------------------- #
 def init_ranking_db():
     conn = sqlite3.connect("ranking.db")
     c = conn.cursor()
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS ranking (
-            name TEXT,
-            score INTEGER,
-            level TEXT,
-            timestamp TEXT
-        )
-    ''')
+    c.execute('''CREATE TABLE IF NOT EXISTS ranking (name TEXT, score INTEGER)''')
     conn.commit()
     conn.close()
 
-def save_score(name, score, level):
+def save_score(name, score):
     conn = sqlite3.connect("ranking.db")
     c = conn.cursor()
-    c.execute("INSERT INTO ranking VALUES (?, ?, ?, ?)",
-              (name, score, level, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    c.execute("INSERT INTO ranking (name, score) VALUES (?, ?)", (name, score))
     conn.commit()
     conn.close()
 
-def load_ranking():
+def get_rankings():
     conn = sqlite3.connect("ranking.db")
     c = conn.cursor()
-    c.execute("SELECT name, score, level, timestamp FROM ranking ORDER BY score DESC LIMIT 10")
-    rows = c.fetchall()
+    c.execute("SELECT name, score FROM ranking ORDER BY score DESC LIMIT 10")
+    rankings = c.fetchall()
     conn.close()
-    return rows
+    return rankings
 
-# ---------------- 게임 기능 ---------------- #
-def generate_map(obstacle_count, goal_count=2, use_portals=False):
-    while True:
-        positions = [(i, j) for i in range(MAP_SIZE) for j in range(MAP_SIZE)]
-        start = random.choice(positions)
-        positions.remove(start)
-        obstacles = set(random.sample(positions, obstacle_count))
-        positions = [p for p in positions if p not in obstacles]
-        goals = random.sample(positions, goal_count)
-        positions = [p for p in positions if p not in goals]
-        portals = random.sample(positions, 2) if use_portals else []
-        if all(bfs_shortest_path(start, [g], obstacles) for g in goals):
-            return start, obstacles, goals, portals
+# -------------------- 맵 생성 함수 -------------------- #
+def generate_map(level_config):
+    grid = [["⬜" for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
+    player_pos = [GRID_SIZE - 1, 0]
+    targets = [[0, GRID_SIZE - 1], [0, GRID_SIZE // 2]]
+    obstacles = set()
+    portals = []
+    ghost_pos = []
 
-def rotate(direction, turn):
-    idx = DIRECTIONS.index(direction)
-    return DIRECTIONS[(idx + 1) % 4] if "오른쪽" in turn else DIRECTIONS[(idx - 1) % 4]
+    while len(obstacles) < level_config["obstacles"]:
+        r, c = random.randint(0, GRID_SIZE - 1), random.randint(0, GRID_SIZE - 1)
+        if [r, c] not in targets and [r, c] != player_pos:
+            obstacles.add((r, c))
 
-def move_forward(pos, direction, steps):
-    for _ in range(steps):
-        offset = MOVE_OFFSET[direction]
-        pos = (pos[0] + offset[0], pos[1] + offset[1])
-        if not (0 <= pos[0] < MAP_SIZE and 0 <= pos[1] < MAP_SIZE):
-            return None
-    return pos
+    for r, c in obstacles:
+        grid[r][c] = "⬛"
 
-def move_ghost(pos, target, obstacles, ignore_obstacles=False):
-    dx, dy = target[0] - pos[0], target[1] - pos[1]
-    options = []
-    if dx != 0:
-        options.append((pos[0] + (1 if dx > 0 else -1), pos[1]))
-    if dy != 0:
-        options.append((pos[0], pos[1] + (1 if dy > 0 else -1)))
-    for opt in options:
-        if 0 <= opt[0] < MAP_SIZE and 0 <= opt[1] < MAP_SIZE:
-            if ignore_obstacles or opt not in obstacles:
-                return opt
-    return pos
+    for tr in targets:
+        grid[tr[0]][tr[1]] = "🏁"
 
-def bfs_shortest_path(start, goals, obstacles):
-    queue = deque([(start, [])])
-    visited = {start}
-    while queue:
-        current, path = queue.popleft()
-        if current in goals:
-            return path
-        for d in MOVE_OFFSET.values():
-            nx, ny = current[0] + d[0], current[1] + d[1]
-            next_pos = (nx, ny)
-            if 0 <= nx < MAP_SIZE and 0 <= ny < MAP_SIZE and next_pos not in obstacles and next_pos not in visited:
-                visited.add(next_pos)
-                queue.append((next_pos, path + [next_pos]))
-    return []
+    portal_pairs = [[[1, 1], [7, 7]]]
+    for p1, p2 in portal_pairs:
+        grid[p1[0]][p1[1]] = "🌀"
+        grid[p2[0]][p2[1]] = "🌀"
+        portals.append((tuple(p1), tuple(p2)))
 
-def draw_grid(position, direction, ghost, ghost_path, obstacles, goals, portals):
-    grid = ""
-    for i in range(MAP_SIZE):
-        for j in range(MAP_SIZE):
-            cell = '⬜'
-            if (i, j) == position:
-                cell = '🤡'
-            elif (i, j) in obstacles:
-                cell = '⬛'
-            elif (i, j) in goals:
-                cell = '🎯'
-            elif (i, j) == ghost:
-                cell = '👻'
-            elif (i, j) in ghost_path:
-                cell = '·'
-            elif (i, j) in portals:
-                cell = PORTAL_SYMBOL
-            grid += cell
-        grid += '\n'
-    st.text(grid)
+    if level_config.get("ghost"):
+        start = player_pos
+        for i in range(level_config["ghost_count"]):
+            if level_config.get("ghost_nearby"):
+                offset = [(0,1), (1,0), (-1,0), (0,-1)]
+                gx, gy = start[0] + offset[i][0], start[1] + offset[i][1]
+            else:
+                gx, gy = start[0] - (5 + i), start[1]
+            if 0 <= gx < GRID_SIZE and 0 <= gy < GRID_SIZE:
+                ghost_pos.append([gx, gy])
 
-# ---------------- UI & 게임 루프 ---------------- #
+    return grid, player_pos, targets, portals, list(obstacles), ghost_pos
+
+# -------------------- 출력 함수 -------------------- #
+def render(grid, player_pos, ghost_pos, direction):
+    temp = [row.copy() for row in grid]
+    for g in ghost_pos:
+        temp[g[0]][g[1]] = "👻"
+    temp[player_pos[0]][player_pos[1]] = "🤖" + DIRECTION_SYMBOLS.get(direction, '')
+    for row in temp:
+        st.markdown("".join(row))
+
+# -------------------- 게임 로직 -------------------- #
+def apply_commands(commands, grid, player_pos, targets, portals, ghost_pos, level_config):
+    visited_targets = set()
+    for cmd in commands:
+        steps = 1
+        if " " in cmd:
+            cmd, step = cmd.split()
+            steps = int(step)
+        for _ in range(steps):
+            dx, dy = DIRECTIONS.get(cmd, (0, 0))
+            new_x, new_y = player_pos[0] + dx, player_pos[1] + dy
+            if 0 <= new_x < GRID_SIZE and 0 <= new_y < GRID_SIZE and grid[new_x][new_y] != "⬛":
+                player_pos = [new_x, new_y]
+            for p1, p2 in portals:
+                if tuple(player_pos) == p1:
+                    player_pos = list(p2)
+                elif tuple(player_pos) == p2:
+                    player_pos = list(p1)
+            for g in ghost_pos:
+                move_ghost(g, player_pos, grid, level_config.get("ghost_blocked", False))
+            if player_pos in ghost_pos:
+                return player_pos, visited_targets, True
+            if player_pos in targets:
+                visited_targets.add(tuple(player_pos))
+    return player_pos, visited_targets, False
+
+def move_ghost(g, target, grid, blocked):
+    dx = target[0] - g[0]
+    dy = target[1] - g[1]
+    move_x = 1 if dx > 0 else -1 if dx < 0 else 0
+    move_y = 1 if dy > 0 else -1 if dy < 0 else 0
+    for dx, dy in [(move_x, 0), (0, move_y)]:
+        nx, ny = g[0] + dx, g[1] + dy
+        if 0 <= nx < GRID_SIZE and 0 <= ny < GRID_SIZE:
+            if blocked and grid[nx][ny] == "⬛":
+                continue
+            g[0], g[1] = nx, ny
+            break
+
+# -------------------- Streamlit 인터페이스 -------------------- #
+st.set_page_config(layout="wide")
 init_ranking_db()
+
+if "level" not in st.session_state:
+    st.session_state.level = list(LEVELS.keys())[0]
+if "map_data" not in st.session_state:
+    st.session_state.map_data = generate_map(LEVELS[st.session_state.level])
+if "commands_input" not in st.session_state:
+    st.session_state.commands_input = ""
+
 st.title("🤖 로봇 명령 퍼즐 게임")
 
-if "state" not in st.session_state:
-    default_level = list(LEVELS.keys())[0]
-    info = LEVELS[default_level]
-    start, obstacles, goals, portals = generate_map(info["obstacles"], use_portals=info.get("portals", False))
-    ghost_range = info.get("ghost_range", 0)
-    ghost = (min(MAP_SIZE - 1, start[0] + ghost_range), start[1]) if info.get("ghost") else None
-    st.session_state.state = {
-        "level": default_level,
-        "start": start,
-        "obstacles": obstacles,
-        "goals": goals,
-        "portals": portals,
-        "position": start,
-        "direction": "UP",
-        "ghost": ghost,
-        "ghost_path": [],
-        "score": 0,
-        "high_score": 0,
-        "total_score": 0,
-        "result": "",
-    }
-    st.session_state.commands_input = ""
+col1, col2 = st.columns([3, 2])
+with col1:
+    st.markdown("### 🎮 게임 화면")
+    grid, player_pos, targets, portals, obstacles, ghost_pos = st.session_state.map_data
+    render(grid, player_pos, ghost_pos, "")
 
-# 레벨 선택
-selected_level = st.selectbox("레벨 선택", list(LEVELS.keys()))
-if selected_level != st.session_state.state["level"]:
-    info = LEVELS[selected_level]
-    start, obstacles, goals, portals = generate_map(info["obstacles"], use_portals=info.get("portals", False))
-    ghost_range = info.get("ghost_range", 0)
-    ghost = (min(MAP_SIZE - 1, start[0] + ghost_range), start[1]) if info.get("ghost") else None
-    st.session_state.state.update({
-        "level": selected_level,
-        "start": start,
-        "obstacles": obstacles,
-        "goals": goals,
-        "portals": portals,
-        "position": start,
-        "direction": "UP",
-        "ghost": ghost,
-        "ghost_path": [],
-        "score": 0,
-        "result": ""
-    })
-    st.session_state.commands_input = ""
+with col2:
+    st.markdown("### ⚙️ 명령어 입력")
+    level = st.selectbox("난이도 선택", list(LEVELS.keys()), index=list(LEVELS.keys()).index(st.session_state.level))
+    if st.button("🔁 다시 시작"):
+        st.session_state.level = level
+        st.session_state.map_data = generate_map(LEVELS[level])
+        st.session_state.commands_input = ""
+    commands_input = st.text_area("명령어를 한 줄에 쉼표로 구분해 입력 (예: 앞으로, 오른쪽 2, 왼쪽)", value=st.session_state.commands_input)
+    st.session_state.commands_input = commands_input
+    if st.button("▶️ 실행"):
+        commands = [cmd.strip() for cmd in commands_input.split(",")]
+        player_pos, visited, is_dead = apply_commands(commands, *st.session_state.map_data, LEVELS[level])
+        score = LEVELS[level]["score"] if len(visited) == 2 and not is_dead else 0
+        st.success(f"획득 점수: {score}점" + (" 🎯 Perfect!" if len(visited) == 2 and not is_dead else " ❌ 실패"))
+        name = st.text_input("이름을 입력하고 Enter로 저장", key="name_input")
+        if name and score > 0:
+            save_score(name, score)
+            st.success("랭킹에 저장되었습니다!")
 
-# 명령어 입력
-commands = st.text_area("명령어 입력", value=st.session_state.commands_input, key="commands_input")
-if st.button("실행"):
-    s = st.session_state.state
-    pos = s["position"]
-    direction = s["direction"]
-    ghost = s["ghost"]
-    ghost_path = []
-    goals_reached = set()
-    failed = False
+if st.button("🏆 랭킹 보기"):
+    st.markdown("### 🥇 랭킹")
+    for idx, (name, score) in enumerate(get_rankings(), 1):
+        st.markdown(f"{idx}위 - {name}: {score}점")
+""")
 
-    for line in commands.strip().split('\n'):
-        if line.startswith("앞으로"):
-            step = int(line.split()[1]) if len(line.split()) > 1 else 1
-            for _ in range(step):
-                next_pos = move_forward(pos, direction, 1)
-                if next_pos is None or next_pos in s["obstacles"]:
-                    s["result"] = "❌ 충돌 또는 벽!"
-                    failed = True
-                    break
-                pos = next_pos
-        elif "회전" in line:
-            direction = rotate(direction, line)
-        elif line == "집기" and pos in s["goals"]:
-            goals_reached.add(pos)
-        if failed:
-            break
-        if ghost:
-            ghost = move_ghost(ghost, pos, s["obstacles"], LEVELS[s["level"]].get("ignore_obstacles", False))
-            ghost_path.append(ghost)
-            if pos == ghost:
-                s["result"] = "👻 귀신에게 잡힘!"
-                failed = True
-                break
-        draw_grid(pos, direction, ghost, ghost_path, s["obstacles"], s["goals"], s["portals"])
-        time.sleep(0.2)
+full_code
 
-    if not failed:
-        score = len(goals_reached) * LEVELS[s["level"]]["score"]
-        s["score"] = score
-        s["total_score"] += score
-        s["high_score"] = max(s["high_score"], score)
-        s["result"] = f"🎯 목표 도달: {len(goals_reached)}, 점수: {score}"
-        shortest = bfs_shortest_path(s["start"], s["goals"], s["obstacles"])
-        if len(commands.strip().split('\n')) == len(shortest) + 2 and len(goals_reached) == 2:
-            s["result"] += "\n🌟 Perfect!"
-
-    s.update({"position": pos, "direction": direction, "ghost": ghost, "ghost_path": ghost_path})
-    st.session_state.commands_input = ""
-
-# 상태 출력
-s = st.session_state.state
-st.markdown(f"**현재 점수:** {s['score']} / **최고 점수:** {s['high_score']} / **누적 점수:** {s['total_score']}")
-st.markdown(f"**결과:** {s['result']}")
-draw_grid(s["position"], s["direction"], s["ghost"], s["ghost_path"], s["obstacles"], s["goals"], s["portals"])
-
-# 다시 시작 버튼
-if st.button("🔁 다시 시작"):
-    s.update({
-        "position": s["start"],
-        "direction": "UP",
-        "ghost": (min(MAP_SIZE - 1, s["start"][0] + LEVELS[s["level"]].get("ghost_range", 0)), s["start"][1]) if LEVELS[s["level"]].get("ghost") else None,
-        "ghost_path": [],
-        "score": 0,
-        "result": ""
-    })
-    st.session_state.commands_input = ""
-
-# 랭킹 등록
-if s["score"] > 0:
-    name = st.text_input("랭킹 등록할 이름 입력")
-    if name:
-        save_score(name, s["score"], s["level"])
-        st.success("✅ 랭킹에 등록 완료!")
-
-if st.button("🏆 랭킹 보기", key="ranking_btn"):
-    for i, (n, sc, lv, ts) in enumerate(load_ranking(), 1):
-        st.write(f"{i}위 | 이름: {n} | 점수: {sc} | 레벨: {lv} | 날짜: {ts}")
