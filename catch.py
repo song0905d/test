@@ -307,6 +307,42 @@ st.markdown(
 )
 
 
+# 명령어 자동완성 옵션 UI
+auto_options = ["앞으로", "앞으로 2", "앞으로 3", "왼쪽 회전", "오른쪽 회전", "집기"]
+selected_command = st.selectbox("자동완성 명령어 선택", auto_options)
+if st.button("➕ 명령어 추가"):
+    current = st.session_state.get("command_input", "")
+    new_value = (current + "\n" + selected_command).strip()
+    st.session_state["command_input"] = new_value
+
+# 명령어 입력창 (자동완성과 연동)
+commands = st.text_area("명령어 입력(한줄에 명령어 하나씩)",
+                        value=st.session_state.get("command_input", ""),
+                        key="command_input")
+
+# 입력 보정: "앞" → "앞으로"
+corrected_lines = []
+for line in commands.strip().split('\n'):
+    stripped = line.strip()
+    if stripped == "앞":
+        corrected_lines.append("앞으로")
+    else:
+        corrected_lines.append(stripped)
+commands = "\n".join(corrected_lines)
+
+# 명령어 자동완성 버튼 (예시 세트 삽입)
+if st.button("\U0001f504 예시 명령어 자동삽입"):
+    example_commands = [
+        "앞으로 2",
+        "오른쪽 회전",
+        "앞으로 3",
+        "왼쪽 회전",
+        "앞으로",
+        "집기"
+    ]
+    st.session_state["command_input"] = '\n'.join(example_commands)
+
+# 경로 → 명령어 변환 함수
 def path_to_commands(path, initial_direction='UP'):
     commands = []
     direction = initial_direction
@@ -338,23 +374,6 @@ def path_to_commands(path, initial_direction='UP'):
     commands.append("집기")
     return commands
 
-# 명령어 자동완성 버튼
-if st.button("\U0001f504 명령어 자동완성"):
-    example_commands = [
-        "앞으로 2",
-        "오른쪽 회전",
-        "앞으로 3",
-        "왼쪽 회전",
-        "앞으로",
-        "집기"
-    ]
-    st.session_state["command_input"] = '\n'.join(example_commands)
-
-# 명령어 입력창 (자동완성과 연동)
-commands = st.text_area("명령어 입력(한줄에 명령어 하나씩)",
-                        value=st.session_state.get("command_input", ""),
-                        key="command_input")
-
 # AI 힌트 버튼 처리
 if st.button("\U0001f9e0 AI 힌트 보기 (-30점)"):
     s = st.session_state.state
@@ -374,3 +393,4 @@ if st.button("\U0001f9e0 AI 힌트 보기 (-30점)"):
             s['total_score'] -= 30
             ai_commands = path_to_commands([s['position']] + path, s['direction'])
             st.info("**AI 추천 명령어:**\n\n" + '\n'.join(ai_commands))
+
