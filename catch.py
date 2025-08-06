@@ -156,7 +156,7 @@ if selected_level != st.session_state.state['level']:
         'commands': []
     })
 
-commands = st.text_area("명령어 입력")
+commands = st.text_area("명령어 입력(한줄에 명령어 하나씩)")
 if st.button("실행"):
     s = st.session_state.state
     pos = s['position']
@@ -263,7 +263,7 @@ with st.expander("📘 게임 설명 보기"):
     로봇 🤡에게 명령어를 입력하여 두 개의 🎯 목표 지점을 방문하고 집기 명령으로 수집하세요!  
     장애물(⬛)을 피하고, 귀신(👻)에게 잡히지 않도록 조심하세요!
 
-    ### ✏️ 사용 가능한 명령어
+    ### ✏️ 사용 가능한 명령어 (기본 방향 위)
     - 앞으로 : 한 칸 전진
     - 앞으로 2, 앞으로 3 : 여러 칸 전진
     - 왼쪽 회전 : 반시계 방향으로 90도 회전
