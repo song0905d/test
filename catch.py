@@ -20,31 +20,7 @@ MAP_SIZE = 9
 PORTAL_SYMBOL = '🌀'
 RANKING_FILE = "rankings.csv"
 
-# ----------------------------- 초기화 ----------------------------- #
-if 'state' not in st.session_state:
-    def reset_game(level):
-        info = LEVELS[level]
-        start, obstacles, goals, portals = generate_map(info['obstacles'], use_portals=info.get('portals', False))
-        ghost = (min(MAP_SIZE-1, start[0]+info.get('ghost_range', 0)), start[1]) if info.get('ghost') else None
-        st.session_state.state = {
-            'level': level,
-            'start': start,
-            'position': start,
-            'direction': 'UP',
-            'obstacles': obstacles,
-            'goals': goals,
-            'portals': portals,
-            'ghost': ghost,
-            'ghost_path': [],
-            'score': 0,
-            'high_score': 0,
-            'total_score': 0,
-            'result': '',
-            'commands': []
-        }
-    reset_game(list(LEVELS.keys())[0])
-
-# ----------------------------- 함수 정의 ----------------------------- #
+# ----------------------------- 함수 정의 (generate_map 먼저) ----------------------------- #
 def generate_map(obstacle_count, goal_count=2, use_portals=False):
     while True:
         positions = [(i, j) for i in range(MAP_SIZE) for j in range(MAP_SIZE)]
@@ -123,7 +99,31 @@ def draw_grid(position, direction, ghost, ghost_path, obstacles, goals, portals)
         grid += '\n'
     st.text(grid)
 
-# ----------------------------- 실행 파트 ----------------------------- #
+# ----------------------------- 초기화 ----------------------------- #
+if 'state' not in st.session_state:
+    def reset_game(level):
+        info = LEVELS[level]
+        start, obstacles, goals, portals = generate_map(info['obstacles'], use_portals=info.get('portals', False))
+        ghost = (min(MAP_SIZE-1, start[0]+info.get('ghost_range', 0)), start[1]) if info.get('ghost') else None
+        st.session_state.state = {
+            'level': level,
+            'start': start,
+            'position': start,
+            'direction': 'UP',
+            'obstacles': obstacles,
+            'goals': goals,
+            'portals': portals,
+            'ghost': ghost,
+            'ghost_path': [],
+            'score': 0,
+            'high_score': 0,
+            'total_score': 0,
+            'result': '',
+            'commands': []
+        }
+    reset_game(list(LEVELS.keys())[0])
+
+# ----------------------------- 실행 ----------------------------- #
 st.title("🤖 로봇 명령 퍼즐 게임")
 st.markdown("""
 <audio autoplay loop>
@@ -222,36 +222,3 @@ if st.button("🏆 랭킹 저장 및 보기"):
         st.subheader("🏅 랭킹 순위")
         ranking_df = pd.read_csv(RANKING_FILE).sort_values(by="점수", ascending=False)
         st.dataframe(ranking_df.reset_index(drop=True))
-
-# 설명
-with st.expander("📘 게임 설명 보기"):
-    st.markdown("""
-    ### 🎮 게임 방법
-    로봇 🤡에게 명령어를 입력하여 두 개의 🎯 목표 지점을 방문하고 집기 명령으로 수집하세요!  
-    장애물(⬛)을 피하고, 귀신(👻)에게 잡히지 않도록 조심하세요!
-
-    ### ✏️ 사용 가능한 명령어
-    - 앞으로 : 한 칸 전진
-    - 앞으로 2, 앞으로 3 : 여러 칸 전진
-    - 왼쪽 회전 : 반시계 방향으로 90도 회전
-    - 오른쪽 회전 : 시계 방향으로 90도 회전
-    - 집기 : 현재 칸에 목표물이 있을 경우 수집
-
-    ### 🌀 포탈 (Level 5)
-    - 포탈(🌀)에 들어가면 다른 포탈 근처 랜덤 위치로 순간 이동!
-    - 귀신은 포탈을 사용할 수 없습니다.
-
-    ### 👻 귀신
-    - 레벨 4: 귀신은 장애물을 피해서 이동
-    - 레벨 5: 귀신은 장애물을 무시하고 직진 추적
-
-    ### 🏆 Perfect 판정
-    - 최단 경로 + 모든 목표 수집 + 명령 수 최소일 때 Perfect! 🌟
-
-    ### 🧱 각 레벨 정보
-    - Level 1 (5점, 착한맛): 장애물 8개, 귀신 없음
-    - Level 2 (10점, 보통맛): 장애물 14개, 귀신 없음
-    - Level 3 (20점, 매운맛): 장애물 20개, 귀신 없음
-    - Level 4 (30점, 불닭맛): 장애물 22개, 귀신 1명
-    - Level 5 (50점, 핵불닭맛): 장애물 25개, 귀신 1명, 포탈 2개
-    """)
