@@ -18,7 +18,7 @@ LEVELS = {
     "Level 3 (20점, 매운맛)": {"obstacles": 20, "score": 20, "ghost": False},
     "Level 4 (30점, 불닭맛)": {"obstacles": 22, "score": 30, "ghost": True, "ghost_range": 7, "ignore_obstacles": False},
     "Level 5 (50점, 핵불닭맛)": {"obstacles": 25, "score": 50, "ghost": True, "ghost_range": 5, "ignore_obstacles": True, "portals": True},
-    "Level 6 (100점, 지옥맛)": {"obstacles": 25, "score": 100, "ghost": True, "ghost_count": 2, "ignore_obstacles": True, "portals": True},
+    "Level 6 (100점, 지옥맛)": {"obstacles": 30, "score": 100, "ghost": True, "ghost_count": 3, "ignore_obstacles": True, "portals": True},
 }
 
 # ----------------------------- DB 초기화 ----------------------------- #
@@ -269,17 +269,7 @@ if st.button("실행"):
         'input_text': ""
     })
 
-# ----------------------------- 출력 ----------------------------- #
-st.markdown(f"**점수:** {st.session_state['score']} / **결과:** {st.session_state['result']}")
-draw_grid(
-    st.session_state['position'],
-    st.session_state['direction'],
-    st.session_state['ghosts'],
-    st.session_state['ghost_path'],
-    st.session_state['obstacles'],
-    st.session_state['goals'],
-    st.session_state['portals']
-)
+
 
 if st.button("🏆 랭킹 보기"):
     rows = load_ranking()
@@ -325,6 +315,7 @@ with st.expander("📘 게임 설명 보기"):
     ### 👻 귀신
     - 레벨 4: 귀신은 장애물을 피해서 이동
     - 레벨 5: 귀신은 장애물을 무시하고 직진 추적
+    - 레벨 6: 레벨 5의 귀신이 2마리 등장 (오류 있음)
 
     ### 🏆 Perfect 판정
     - 최단 경로 + 모든 목표 수집 + 명령 수 최소일 때 Perfect! 🌟
@@ -335,4 +326,6 @@ with st.expander("📘 게임 설명 보기"):
     - Level 3 (20점, 매운맛): 장애물 20개, 귀신 없음
     - Level 4 (30점, 불닭맛): 장애물 22개, 귀신 1명
     - Level 5 (50점, 핵불닭맛): 장애물 25개, 귀신 1명, 포탈 2개
+    """)
+    - Level 6 (100점, 맛): 장애물 30개, 귀신 2명, 포탈 2개
     """)
