@@ -35,8 +35,8 @@ def generate_map(obstacle_count, goal_count=2):
         if all(bfs_shortest_path(start, [goal], obstacles) for goal in goals):
             break
 
-    ghost1 = (max(0, start[0]-5), start[1])
-    ghost2 = (min(MAP_SIZE-1, start[0]+3), start[1])
+    ghost1 = (max(0, start[0]-7), start[1])
+    ghost2 = (min(MAP_SIZE-1, start[0]+5), start[1])
     return start, obstacles, goals, ghost1, ghost2
 
 def rotate(direction, turn):
@@ -198,3 +198,4 @@ if st.button("다시 시작"):
     st.session_state.score = 0
     st.session_state.result = ''
     st.session_state.ghost_path = []
+
