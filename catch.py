@@ -2,7 +2,7 @@ import streamlit as st
 import random
 import time
 from collections import deque
-
+ 
 # ----------------------------- 설정 ----------------------------- #
 DIRECTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT']
 DIRECTION_SYMBOLS = {'UP': '↑', 'RIGHT': '→', 'DOWN': '↓', 'LEFT': '←'}
