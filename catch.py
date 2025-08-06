@@ -157,7 +157,7 @@ if selected_level != st.session_state.state['level']:
         'result': '',
         'commands': []
     })
-    st.session_state['command_input'] = ""  # 🔁 명령어창 초기화 추가
+    st.session_state["command_input"] = ""  # ✅ 명확하게 초기화
 
 
 commands = st.text_area("명령어 입력(한줄에 명령어 하나씩)", value=st.session_state.get('command_input', ''))
