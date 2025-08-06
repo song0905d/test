@@ -11,8 +11,8 @@ LEVELS = {
     "Level 1 (5점, 착한맛)": {"obstacles": 8, "score": 5, "ghost": False},
     "Level 2 (10점, 보통맛)": {"obstacles": 14, "score": 10, "ghost": False},
     "Level 3 (20점, 매운맛)": {"obstacles": 20, "score": 20, "ghost": False},
-    "Level 4 (30점, 불닭맛)": {"obstacles": 22, "score": 30, "ghost": True, "ghost_range": 7, "ignore_obstacles": False},
-    "Level 5 (50점, 핵불닭맛)": {"obstacles": 25, "score": 50, "ghost": True, "ghost_range": 5, "ignore_obstacles": True, "portals": True},
+    "Level 4 (30점, 불닭맛)": {"obstacles": 22, "score": 30, "ghost": True, "ghost_range": 5, "ignore_obstacles": False},
+    "Level 5 (50점, 핵불닭맛)": {"obstacles": 25, "score": 50, "ghost": True, "ghost_range": 4, "ignore_obstacles": True, "portals": True},
 }
 MAP_SIZE = 9
 PORTAL_SYMBOL = '🌀'
@@ -135,7 +135,7 @@ if 'state' not in st.session_state:
         'result': '',
         'commands': []
     }
-    st.session_state['command_input'] = ""
+    st.session_state['commands_input'] = ""
 
 selected_level = st.selectbox("레벨 선택", list(LEVELS.keys()))
 if selected_level != st.session_state.state['level']:
