@@ -103,6 +103,15 @@ def draw_grid(position, direction, ghost, ghost_path, obstacles, goals, portals)
 # ----------------------------- 실행 ----------------------------- #
 st.title("🤖 로봇 명령 퍼즐 게임")
 
+# ✅ 배경음악 삽입
+st.markdown("""
+<audio autoplay loop>
+  <source src="https://www.bensound.com/bensound-music/bensound-littleidea.mp3" type="audio/mp3">
+Your browser does not support the audio element.
+</audio>
+""", unsafe_allow_html=True)
+
+
 if 'state' not in st.session_state:
     default_level = list(LEVELS.keys())[0]
     level_info = LEVELS[default_level]
