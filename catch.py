@@ -1,8 +1,9 @@
 import streamlit as st
 import random
 import time
+import sqlite3
+from datetime import datetime
 from collections import deque
-
 # ----------------------------- 설정 ----------------------------- #
 DIRECTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT']
 DIRECTION_SYMBOLS = {'UP': '↑', 'RIGHT': '→', 'DOWN': '↓', 'LEFT': '←'}
