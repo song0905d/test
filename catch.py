@@ -1,177 +1,275 @@
-from textwrap import dedent
-
-full_code = dedent("""
 import streamlit as st
 import random
+import time
 import sqlite3
+from collections import deque
 
-# -------------------- 초기 설정 -------------------- #
+# 설정
 GRID_SIZE = 9
-DIRECTIONS = {'앞으로': (-1, 0), '뒤로': (1, 0), '왼쪽': (0, -1), '오른쪽': (0, 1)}
-DIRECTION_SYMBOLS = {'앞으로': '↑', '뒤로': '↓', '왼쪽': '←', '오른쪽': '→'}
+PLAYER_ICON = "🤡"
+GOAL_ICON = "🎯"
+OBSTACLE_ICON = "⬛"
+GHOST_ICON = ["👻", "💀"]
+PORTAL_ICON = "🌀"
+
+DIRECTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT']
+DIRECTION_SYMBOLS = {'UP': '↑', 'RIGHT': '→', 'DOWN': '↓', 'LEFT': '←'}
+MOVE_OFFSET = {'UP': (-1, 0), 'DOWN': (1, 0), 'LEFT': (0, -1), 'RIGHT': (0, 1)}
 
 LEVELS = {
-    "Level 1 (5점, 착한맛)": {"score": 5, "obstacles": 8, "ghost": False},
-    "Level 2 (10점, 보통맛)": {"score": 10, "obstacles": 14, "ghost": False},
-    "Level 3 (20점, 매운맛)": {"score": 20, "obstacles": 20, "ghost": False},
-    "Level 4 (30점, 불닭맛)": {"score": 30, "obstacles": 22, "ghost": True, "ghost_count": 1, "ghost_blocked": True, "ghost_nearby": False},
-    "Level 5 (50점, 핵불닭맛)": {"score": 50, "obstacles": 25, "ghost": True, "ghost_count": 1, "ghost_blocked": False, "ghost_nearby": False},
-    "Level 6 (100점, 헬맛)": {"score": 100, "obstacles": 28, "ghost": True, "ghost_count": 2, "ghost_blocked": False, "ghost_nearby": True}
+    "Level 1 (5점, 착한맛)": {"obstacles": 8, "score": 5, "ghost": False},
+    "Level 2 (10점, 보통맛)": {"obstacles": 14, "score": 10, "ghost": False},
+    "Level 3 (20점, 매운맛)": {"obstacles": 20, "score": 20, "ghost": False},
+    "Level 4 (30점, 불닭맛)": {"obstacles": 22, "score": 30, "ghost": True, "ghost_block": True, "ghost_range": 7},
+    "Level 5 (50점, 핵불닭맛)": {"obstacles": 25, "score": 50, "ghost": True, "ghost_block": False, "ghost_range": 5, "portal": 2},
+    "Level 6 (100점, 지옥맛)": {"obstacles": 28, "score": 100, "ghost": True, "ghost_block": False, "ghost_range": 1, "ghost_spawn_surround": 2, "portal": 2},
 }
 
-# -------------------- DB 초기화 -------------------- #
+# DB 초기화
 def init_ranking_db():
     conn = sqlite3.connect("ranking.db")
     c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS ranking (name TEXT, score INTEGER)''')
+    c.execute("""CREATE TABLE IF NOT EXISTS ranking (
+        name TEXT,
+        score INTEGER
+    )""")
     conn.commit()
     conn.close()
 
 def save_score(name, score):
     conn = sqlite3.connect("ranking.db")
     c = conn.cursor()
-    c.execute("INSERT INTO ranking (name, score) VALUES (?, ?)", (name, score))
+    c.execute("INSERT INTO ranking VALUES (?, ?)", (name, score))
     conn.commit()
     conn.close()
 
-def get_rankings():
+def get_ranking():
     conn = sqlite3.connect("ranking.db")
     c = conn.cursor()
     c.execute("SELECT name, score FROM ranking ORDER BY score DESC LIMIT 10")
-    rankings = c.fetchall()
+    rows = c.fetchall()
     conn.close()
-    return rankings
+    return rows
 
-# -------------------- 맵 생성 함수 -------------------- #
-def generate_map(level_config):
-    grid = [["⬜" for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
-    player_pos = [GRID_SIZE - 1, 0]
-    targets = [[0, GRID_SIZE - 1], [0, GRID_SIZE // 2]]
-    obstacles = set()
-    portals = []
-    ghost_pos = []
-
-    while len(obstacles) < level_config["obstacles"]:
-        r, c = random.randint(0, GRID_SIZE - 1), random.randint(0, GRID_SIZE - 1)
-        if [r, c] not in targets and [r, c] != player_pos:
-            obstacles.add((r, c))
-
-    for r, c in obstacles:
-        grid[r][c] = "⬛"
-
-    for tr in targets:
-        grid[tr[0]][tr[1]] = "🏁"
-
-    portal_pairs = [[[1, 1], [7, 7]]]
-    for p1, p2 in portal_pairs:
-        grid[p1[0]][p1[1]] = "🌀"
-        grid[p2[0]][p2[1]] = "🌀"
-        portals.append((tuple(p1), tuple(p2)))
-
-    if level_config.get("ghost"):
-        start = player_pos
-        for i in range(level_config["ghost_count"]):
-            if level_config.get("ghost_nearby"):
-                offset = [(0,1), (1,0), (-1,0), (0,-1)]
-                gx, gy = start[0] + offset[i][0], start[1] + offset[i][1]
-            else:
-                gx, gy = start[0] - (5 + i), start[1]
-            if 0 <= gx < GRID_SIZE and 0 <= gy < GRID_SIZE:
-                ghost_pos.append([gx, gy])
-
-    return grid, player_pos, targets, portals, list(obstacles), ghost_pos
-
-# -------------------- 출력 함수 -------------------- #
-def render(grid, player_pos, ghost_pos, direction):
-    temp = [row.copy() for row in grid]
-    for g in ghost_pos:
-        temp[g[0]][g[1]] = "👻"
-    temp[player_pos[0]][player_pos[1]] = "🤖" + DIRECTION_SYMBOLS.get(direction, '')
-    for row in temp:
-        st.markdown("".join(row))
-
-# -------------------- 게임 로직 -------------------- #
-def apply_commands(commands, grid, player_pos, targets, portals, ghost_pos, level_config):
-    visited_targets = set()
-    for cmd in commands:
-        steps = 1
-        if " " in cmd:
-            cmd, step = cmd.split()
-            steps = int(step)
-        for _ in range(steps):
-            dx, dy = DIRECTIONS.get(cmd, (0, 0))
-            new_x, new_y = player_pos[0] + dx, player_pos[1] + dy
-            if 0 <= new_x < GRID_SIZE and 0 <= new_y < GRID_SIZE and grid[new_x][new_y] != "⬛":
-                player_pos = [new_x, new_y]
-            for p1, p2 in portals:
-                if tuple(player_pos) == p1:
-                    player_pos = list(p2)
-                elif tuple(player_pos) == p2:
-                    player_pos = list(p1)
-            for g in ghost_pos:
-                move_ghost(g, player_pos, grid, level_config.get("ghost_blocked", False))
-            if player_pos in ghost_pos:
-                return player_pos, visited_targets, True
-            if player_pos in targets:
-                visited_targets.add(tuple(player_pos))
-    return player_pos, visited_targets, False
-
-def move_ghost(g, target, grid, blocked):
-    dx = target[0] - g[0]
-    dy = target[1] - g[1]
-    move_x = 1 if dx > 0 else -1 if dx < 0 else 0
-    move_y = 1 if dy > 0 else -1 if dy < 0 else 0
-    for dx, dy in [(move_x, 0), (0, move_y)]:
-        nx, ny = g[0] + dx, g[1] + dy
-        if 0 <= nx < GRID_SIZE and 0 <= ny < GRID_SIZE:
-            if blocked and grid[nx][ny] == "⬛":
-                continue
-            g[0], g[1] = nx, ny
-            break
-
-# -------------------- Streamlit 인터페이스 -------------------- #
-st.set_page_config(layout="wide")
-init_ranking_db()
-
+# 세션 초기화
 if "level" not in st.session_state:
     st.session_state.level = list(LEVELS.keys())[0]
-if "map_data" not in st.session_state:
-    st.session_state.map_data = generate_map(LEVELS[st.session_state.level])
+
+if "grid" not in st.session_state:
+    st.session_state.grid = None
+
 if "commands_input" not in st.session_state:
     st.session_state.commands_input = ""
 
-st.title("🤖 로봇 명령 퍼즐 게임")
+if "score" not in st.session_state:
+    st.session_state.score = 0
+if "high_score" not in st.session_state:
+    st.session_state.high_score = 0
 
-col1, col2 = st.columns([3, 2])
-with col1:
-    st.markdown("### 🎮 게임 화면")
-    grid, player_pos, targets, portals, obstacles, ghost_pos = st.session_state.map_data
-    render(grid, player_pos, ghost_pos, "")
+# 맵 생성
+def generate_map(level_key):
+    grid = [["" for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
+    player_pos = (0, 0)
+    grid[0][0] = "P"
+    goal_pos = [(GRID_SIZE - 1, GRID_SIZE - 1)]
+    grid[GRID_SIZE - 1][GRID_SIZE - 1] = "G"
+    data = LEVELS[level_key]
+    ghost_pos = []
+    portal_pos = []
 
-with col2:
-    st.markdown("### ⚙️ 명령어 입력")
-    level = st.selectbox("난이도 선택", list(LEVELS.keys()), index=list(LEVELS.keys()).index(st.session_state.level))
+    for _ in range(data.get("obstacles", 0)):
+        while True:
+            r, c = random.randint(0, GRID_SIZE - 1), random.randint(0, GRID_SIZE - 1)
+            if grid[r][c] == "":
+                grid[r][c] = "X"
+                break
+
+    if data.get("portal", 0) == 2:
+        for _ in range(2):
+            while True:
+                r, c = random.randint(0, GRID_SIZE - 1), random.randint(0, GRID_SIZE - 1)
+                if grid[r][c] == "":
+                    grid[r][c] = "O"
+                    portal_pos.append((r, c))
+                    break
+
+    if data.get("ghost"):
+        if "ghost_spawn_surround" in data:
+            for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                gr, gc = player_pos[0] + dr, player_pos[1] + dc
+                if 0 <= gr < GRID_SIZE and 0 <= gc < GRID_SIZE and grid[gr][gc] == "":
+                    grid[gr][gc] = "ghost"
+                    ghost_pos.append((gr, gc))
+                    if len(ghost_pos) >= data["ghost_spawn_surround"]:
+                        break
+        else:
+            gr, gc = GRID_SIZE - data["ghost_range"], GRID_SIZE - data["ghost_range"]
+            if grid[gr][gc] == "":
+                grid[gr][gc] = "ghost"
+                ghost_pos.append((gr, gc))
+
+    return grid, player_pos, goal_pos, ghost_pos, portal_pos
+
+# UI 출력
+def print_map(grid, player_pos, ghost_pos, goal_pos, portal_pos, direction):
+    symbol_grid = [["⬜" for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
+    for r in range(GRID_SIZE):
+        for c in range(GRID_SIZE):
+            if grid[r][c] == "X":
+                symbol_grid[r][c] = OBSTACLE_ICON
+            elif grid[r][c] == "O":
+                symbol_grid[r][c] = PORTAL_ICON
+            elif (r, c) in goal_pos:
+                symbol_grid[r][c] = GOAL_ICON
+            elif grid[r][c] == "ghost":
+                symbol_grid[r][c] = random.choice(GHOST_ICON)
+    for idx, (gr, gc) in enumerate(ghost_pos):
+        symbol_grid[gr][gc] = GHOST_ICON[idx % 2]
+    r, c = player_pos
+    symbol_grid[r][c] = PLAYER_ICON + DIRECTION_SYMBOLS[direction]
+    st.markdown("### 🧭 게임 맵")
+    for row in symbol_grid:
+        st.markdown("".join(row))
+
+# 게임 로직
+def run_game(commands, grid, player_pos, ghost_pos, goal_pos, portal_pos, level_data):
+    direction = "RIGHT"
+    score = 0
+    perfect = True
+
+    for cmd in commands:
+        cmd = cmd.strip()
+        if " " in cmd:
+            base, count = cmd.split()
+            count = int(count)
+        else:
+            base, count = cmd, 1
+
+        if base == "왼쪽":
+            direction = DIRECTIONS[(DIRECTIONS.index(direction) - count) % 4]
+        elif base == "오른쪽":
+            direction = DIRECTIONS[(DIRECTIONS.index(direction) + count) % 4]
+        elif base == "앞으로":
+            for _ in range(count):
+                dr, dc = MOVE_OFFSET[direction]
+                nr, nc = player_pos[0] + dr, player_pos[1] + dc
+                if not (0 <= nr < GRID_SIZE and 0 <= nc < GRID_SIZE):
+                    perfect = False
+                    break
+                if grid[nr][nc] == "X":
+                    perfect = False
+                    break
+                if grid[nr][nc] == "ghost":
+                    st.error("👻 귀신에게 잡혔습니다!")
+                    return score, False
+                if grid[nr][nc] == "O" and len(portal_pos) == 2:
+                    nr, nc = portal_pos[1] if (nr, nc) == portal_pos[0] else portal_pos[0]
+                player_pos = (nr, nc)
+
+                new_ghosts = []
+                for gr, gc in ghost_pos:
+                    path = bfs((gr, gc), player_pos, grid if level_data.get("ghost_block") else None)
+                    if len(path) > 1:
+                        new_ghosts.append(path[1])
+                        if path[1] == player_pos:
+                            st.error("👻 귀신에게 잡혔습니다!")
+                            return score, False
+                    else:
+                        new_ghosts.append((gr, gc))
+                ghost_pos = new_ghosts
+
+        print_map(grid, player_pos, ghost_pos, goal_pos, portal_pos, direction)
+        time.sleep(0.5)
+
+    reached_goals = sum([1 for g in goal_pos if player_pos == g])
+    score = level_data["score"] * reached_goals
+    if reached_goals >= len(goal_pos):
+        st.success("🎉 목표에 도달했습니다!")
+        if perfect:
+            st.balloons()
+            st.markdown("✅ **Perfect!**")
+    else:
+        st.warning("목표에 도달하지 못했습니다.")
+    return score, True
+
+# BFS 경로 탐색
+def bfs(start, goal, grid):
+    q = deque([(start, [])])
+    visited = set()
+    while q:
+        (r, c), path = q.popleft()
+        if (r, c) == goal:
+            return path + [(r, c)]
+        for dr, dc in MOVE_OFFSET.values():
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < GRID_SIZE and 0 <= nc < GRID_SIZE and (nr, nc) not in visited:
+                if grid and grid[nr][nc] == "X":
+                    continue
+                visited.add((nr, nc))
+                q.append(((nr, nc), path + [(r, c)]))
+    return []
+
+# 앱 실행
+def main():
+    st.title("🤖 로봇 명령 퍼즐 게임")
+
+    init_ranking_db()
+
+    st.markdown("### 🎮 레벨 선택")
+    level_key = st.selectbox("난이도를 선택하세요", list(LEVELS.keys()), index=list(LEVELS.keys()).index(st.session_state.level))
+    level_data = LEVELS[level_key]
+
     if st.button("🔁 다시 시작"):
-        st.session_state.level = level
-        st.session_state.map_data = generate_map(LEVELS[level])
+        st.session_state.level = level_key
+        st.session_state.grid, st.session_state.player_pos, st.session_state.goal_pos, st.session_state.ghost_pos, st.session_state.portal_pos = generate_map(level_key)
         st.session_state.commands_input = ""
-    commands_input = st.text_area("명령어를 한 줄에 쉼표로 구분해 입력 (예: 앞으로, 오른쪽 2, 왼쪽)", value=st.session_state.commands_input)
-    st.session_state.commands_input = commands_input
-    if st.button("▶️ 실행"):
-        commands = [cmd.strip() for cmd in commands_input.split(",")]
-        player_pos, visited, is_dead = apply_commands(commands, *st.session_state.map_data, LEVELS[level])
-        score = LEVELS[level]["score"] if len(visited) == 2 and not is_dead else 0
-        st.success(f"획득 점수: {score}점" + (" 🎯 Perfect!" if len(visited) == 2 and not is_dead else " ❌ 실패"))
-        name = st.text_input("이름을 입력하고 Enter로 저장", key="name_input")
-        if name and score > 0:
-            save_score(name, score)
-            st.success("랭킹에 저장되었습니다!")
 
-if st.button("🏆 랭킹 보기"):
-    st.markdown("### 🥇 랭킹")
-    for idx, (name, score) in enumerate(get_rankings(), 1):
-        st.markdown(f"{idx}위 - {name}: {score}점")
-""")
+    if st.session_state.grid is None or st.session_state.level != level_key:
+        st.session_state.level = level_key
+        st.session_state.grid, st.session_state.player_pos, st.session_state.goal_pos, st.session_state.ghost_pos, st.session_state.portal_pos = generate_map(level_key)
+        st.session_state.commands_input = ""
 
-full_code
+    st.markdown(f"**현재 점수:** {st.session_state.score} / **최고 점수:** {st.session_state.high_score}")
+    print_map(st.session_state.grid, st.session_state.player_pos, st.session_state.ghost_pos, st.session_state.goal_pos, st.session_state.portal_pos, "RIGHT")
 
+    st.markdown("### 📝 명령어 입력")
+    st.session_state.commands_input = st.text_area("명령어를 입력하세요", value=st.session_state.commands_input, height=100, key="cmd_input")
+
+    if st.button("🚀 실행"):
+        commands = [line.strip() for line in st.session_state.commands_input.split("\n") if line.strip()]
+        score, alive = run_game(commands, st.session_state.grid, st.session_state.player_pos, st.session_state.ghost_pos, st.session_state.goal_pos, st.session_state.portal_pos, level_data)
+        if alive:
+            st.session_state.score = score
+            if score > st.session_state.high_score:
+                st.session_state.high_score = score
+
+    if st.button("📋 랭킹 저장"):
+        name = st.text_input("이름을 입력하세요", key="rank_name")
+        if name:
+            save_score(name, st.session_state.score)
+            st.success("랭킹 저장 완료!")
+
+    if st.button("🏆 랭킹 보기"):
+        st.markdown("### 🏆 상위 랭킹")
+        ranking = get_ranking()
+        for i, (name, score) in enumerate(ranking, 1):
+            st.markdown(f"**{i}. {name} - {score}점**")
+
+main()
+
+# ------------------ 배경음악 자동 재생 ------------------
+import base64
+
+def autoplay_audio(file_path):
+    with open(file_path, "rb") as f:
+        data = f.read()
+        b64 = base64.b64encode(data).decode()
+        md = f"""
+        <audio autoplay loop>
+        <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
+        </audio>
+        """
+        st.markdown(md, unsafe_allow_html=True)
+
+autoplay_audio("bgm.mp3")  # mp3 파일명에 맞게 조정
+# -------------------------------------------------------
