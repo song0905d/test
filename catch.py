@@ -158,7 +158,7 @@ if selected_level != st.session_state.state['level']:
 commands = st.text_area("명령어 입력")
 if st.button("실행"):
    pos = st.session_state.start
-    direction = 'UP'
+    direction = 'up'
     ghost = st.session_state.ghost
     ghost_path = []
     visited_goals = set()
