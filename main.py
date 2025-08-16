@@ -157,71 +157,18 @@ def _rerun():
 # ----------------------------- 앱 ----------------------------- #
 st.title("🤖 로봇 명령 퍼즐")
 
-
 import streamlit as st
-import streamlit.components.v1 as components
-
-BGM_URL = "https://www.bensound.com/bensound-music/bensound-littleidea.mp3"
-
-# 상태 초기화
-if "bgm_on" not in st.session_state:
-    st.session_state.bgm_on = False
-if "bgm_volume" not in st.session_state:
-    st.session_state.bgm_volume = 50  # 0~100
-
-col1, col2 = st.columns([1, 2])
-with col1:
-    if not st.session_state.bgm_on:
-        if st.button("🔊 소리 켜기", use_container_width=True):
-            st.session_state.bgm_on = True
-            st.rerun()
-    else:
-        if st.button("🔇 소리 끄기", use_container_width=True):
-            st.session_state.bgm_on = False
-            st.rerun()
-with col2:
-    st.session_state.bgm_volume = st.slider("볼륨", 0, 100, st.session_state.bgm_volume)
-
-# HTML 컴포넌트로 오디오 삽입 (자동재생은 muted 상태에서만 브라우저가 허용)
-components.html(
-    f"""
-    <audio id="bgm" autoplay loop playsinline {"muted" if not st.session_state.bgm_on else ""} style="display:none">
-      <source src="{BGM_URL}" type="audio/mpeg">
-    </audio>
-    <script>
-      const audio = document.getElementById('bgm');
-      // 볼륨 반영
-      audio.volume = {st.session_state.bgm_volume/100.0};
-
-      // 버튼으로 소리 켰을 때 확실히 재생 시도
-      if ({str(st.session_state.bgm_on).lower()}) {{
-        audio.muted = false;
-        const p = audio.play();
-        if (p !== undefined) {{
-          p.catch(() => {{
-            // 여전히 차단되면 컨트롤 표시 (사용자가 직접 재생 가능)
-            audio.setAttribute('controls', '');
-            audio.style.display = 'block';
-          }});
-        }}
-      }} else {{
-        // 무음 자동재생 유지
-        audio.muted = true;
-        audio.play().catch(()=>{{}});
-      }}
-    </script>
-    """,
-    height=0,
-)
 
 st.markdown(
     """
-    <audio controls loop>
+    <audio autoplay loop muted playsinline>
       <source src="https://www.bensound.com/bensound-music/bensound-littleidea.mp3" type="audio/mpeg">
+      Your browser does not support the audio element.
     </audio>
     """,
     unsafe_allow_html=True
 )
+
 
 
 
