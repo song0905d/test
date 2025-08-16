@@ -194,6 +194,14 @@ if st.button("실행"):
 
         elif "회전" in cmd:
             direction = rotate(direction, cmd)
+        
+        elif cmd == "뒤로 이동":
+            back_pos = move_forward(pos, 'DOWN', 1)
+            if back_pos is None or back_pos in s['obstacles']:
+                s['result'] = '❌ 장애물 충돌 또는 벽 밖으로 벗어남'
+                failed = True
+                break
+            pos = back_pos
 
         elif cmd == "왼쪽으로 이동":
             left_pos = move_forward(pos, 'LEFT', 1)
@@ -299,8 +307,9 @@ with st.expander("📘 게임 설명 보기"):
 
     ### ✏️ 사용 가능한 명령어 (기본 방향 위)
     - 편의를 위한 자동완성 명령어 기능 존재
-    - 앞으로 : 한 칸 전진
-    - 앞으로 2, 앞으로 3 : 여러 칸 전진
+    - 앞으로 : 위로 한 칸 이동
+    - 앞으로 2, 앞으로 3 : 여러 칸 위로 이동
+    - 뒤로 이동 : 밑으로 한칸 이동
     - 왼쪽으로 이동 : 왼쪽 방향으로 1칸 이동
     - 오른쪽으로 이동 : 오른쪽 방향으로 1칸 이동
     - 집기 : 현재 칸에 목표물이 있을 경우 수집
@@ -338,7 +347,8 @@ st.markdown(
 
 
 # 명령어 자동완성 옵션 UI
-auto_options = ["앞으로", "앞으로 2", "앞으로 3", "왼쪽으로 이동", "오른쪽으로 이동", "집기"]
+auto_options = ["앞으로", "앞으로 2", "앞으로 3", "왼쪽으로 이동", "오른쪽으로 이동", "뒤로 이동", "집기"]
+
 selected_command = st.selectbox("자동완성 명령어 선택", auto_options)
 if st.button("➕ 명령어 추가"):
     current = st.session_state.get("command_input", "")
