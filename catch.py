@@ -168,6 +168,7 @@ if selected_level != st.session_state.state['level']:
 
 commands = st.text_area("명령어 입력(한줄에 명령어 하나씩)", value=st.session_state.get('command_input', ''))
 
+commands = st.session_state.get("command_input", "")
 
 
 if st.button("실행"):
