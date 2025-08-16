@@ -161,7 +161,7 @@ import streamlit as st
 
 st.markdown(
     """
-    <audio autoplay loop muted playsinline>
+    <audio controls loop>
       <source src="https://www.bensound.com/bensound-music/bensound-littleidea.mp3" type="audio/mpeg">
       Your browser does not support the audio element.
     </audio>
