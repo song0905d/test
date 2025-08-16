@@ -2,7 +2,7 @@ import streamlit as st
 import random
 import time
 from collections import deque
- 
+
 # ----------------------------- 설정 ----------------------------- #
 DIRECTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT']
 DIRECTION_SYMBOLS = {'UP': '↑', 'RIGHT': '→', 'DOWN': '↓', 'LEFT': '←'}
@@ -30,11 +30,9 @@ def generate_map(obstacle_count, goal_count=2, use_portals=False):
         goals = random.sample(positions, goal_count)
         positions = [p for p in positions if p not in goals]
 
-        portals = []
-        if use_portals:
-            portals = random.sample(positions, 2)
+        portals = random.sample(positions, 2) if use_portals else []
 
-        # 시작점->각 목표까지 길 있는지 확인
+        # 시작→각 목표로 경로가 있는 경우만 채택
         if all(bfs_shortest_path(start, [g], obstacles) for g in goals):
             break
 
@@ -105,6 +103,49 @@ def draw_grid(position, direction, ghost, ghost_path, obstacles, goals, portals)
         grid += '\n'
     st.text(grid)
 
+def path_to_commands(path, initial_direction='UP'):
+    cmds = []
+    direction = initial_direction
+    forward_count = 0
+
+    def flush_forward():
+        nonlocal forward_count
+        if forward_count == 1:
+            cmds.append("앞으로")
+        elif forward_count > 1:
+            cmds.append(f"앞으로 {forward_count}칸")
+        forward_count = 0
+
+    for i in range(1, len(path)):
+        cur = path[i - 1]
+        nxt = path[i]
+        dx, dy = nxt[0] - cur[0], nxt[1] - cur[1]
+
+        for dir_name, (dx_offset, dy_offset) in MOVE_OFFSET.items():
+            if (dx, dy) == (dx_offset, dy_offset):
+                target_dir = dir_name
+                break
+
+        if direction == target_dir:
+            forward_count += 1
+        else:
+            flush_forward()
+            # 회전
+            while direction != target_dir:
+                cur_idx = DIRECTIONS.index(direction)
+                target_idx = DIRECTIONS.index(target_dir)
+                if (target_idx - cur_idx) % 4 == 1:
+                    cmds.append("오른쪽 회전")
+                    direction = rotate(direction, "오른쪽 회전")
+                else:
+                    cmds.append("왼쪽 회전")
+                    direction = rotate(direction, "왼쪽 회전")
+            forward_count = 1
+
+    flush_forward()
+    cmds.append("집기")
+    return cmds
+
 # ----------------------------- 실행 ----------------------------- #
 st.title("🤖 로봇 명령 퍼즐 게임")
 
@@ -122,9 +163,7 @@ if 'state' not in st.session_state:
     default_level = list(LEVELS.keys())[0]
     level_info = LEVELS[default_level]
     start, obstacles, goals, portals = generate_map(level_info['obstacles'], use_portals=level_info.get('portals', False))
-    ghost = None
-    if level_info['ghost']:
-        ghost = (min(MAP_SIZE - 1, start[0] + level_info['ghost_range']), start[1])
+    ghost = (min(MAP_SIZE - 1, start[0] + level_info['ghost_range']), start[1]) if level_info['ghost'] else None
     st.session_state.state = {
         'level': default_level,
         'start': start,
@@ -148,9 +187,7 @@ selected_level = st.selectbox("레벨 선택", list(LEVELS.keys()))
 if selected_level != st.session_state.state['level']:
     level_info = LEVELS[selected_level]
     start, obstacles, goals, portals = generate_map(level_info['obstacles'], use_portals=level_info.get('portals', False))
-    ghost = None
-    if level_info['ghost']:
-        ghost = (min(MAP_SIZE - 1, start[0] + level_info['ghost_range']), start[1])
+    ghost = (min(MAP_SIZE - 1, start[0] + level_info['ghost_range']), start[1]) if level_info['ghost'] else None
     st.session_state.state.update({
         'level': selected_level,
         'start': start,
@@ -164,125 +201,156 @@ if selected_level != st.session_state.state['level']:
         'result': '',
         'commands': []
     })
-    st.session_state["command_input"] = ""  # 초기화
+    st.session_state["command_input"] = ""
 
-# ✅ 입력창: 이 페이지에서 단 한 번만 생성
-commands = st.text_area(
-    "명령어 입력(한줄에 명령어 하나씩)",
+# ✅ 입력창: 페이지에 한 번만!
+input_text = st.text_area(
+    "명령어 입력(한 줄에 하나씩)",
     value=st.session_state.get('command_input', ''),
     key="command_input"
 )
 
-# ✅ 들여쓰기 없이, 한 줄 아래에 놓기 (중요)
-command_list = [c.strip() for c in commands.strip().split('\n') if c.strip()]
+# 간단 보정(“앞” -> “앞으로”)
+lines = []
+for line in input_text.strip().split('\n'):
+    s = line.strip()
+    lines.append("앞으로" if s == "앞" else s)
+input_text = "\n".join(lines)
 
-# 실행 버튼
+# ✅ 들여쓰기 없이 바로 리스트로 변환
+command_list = [c for c in input_text.split('\n') if c.strip()]
+
+# 자동완성(입력창은 추가 생성하지 않음)
+auto_options = ["앞으로", "앞으로 2", "앞으로 3", "왼쪽 회전", "오른쪽 회전", "왼쪽으로 이동", "오른쪽으로 이동", "뒤로 이동", "집기"]
+col1, col2 = st.columns([2,1])
+with col1:
+    selected_command = st.selectbox("자동완성 명령어 선택", auto_options, index=0)
+with col2:
+    if st.button("➕ 추가"):
+        cur = st.session_state.get("command_input", "")
+        st.session_state["command_input"] = (cur + ("\n" if cur else "") + selected_command)
+        st.experimental_rerun()
+
+# 실행
 if st.button("실행"):
-    s = st.session_state.state
-    pos = s['position']
-    direction = s['direction']
-    ghost = s['ghost']
-    ghost_path = []
-    visited_goals = set()
-    failed = False
+    try:
+        s = st.session_state.state
+        pos = s['position']
+        direction = s['direction']
+        ghost = s['ghost']
+        ghost_path = []
+        visited_goals = set()
+        failed = False
 
-    for cmd in command_list:
-        cmd = cmd.strip()
+        for raw in command_list:
+            cmd = raw.strip()
+            if not cmd:
+                continue
 
-        if cmd.startswith("앞으로"):
-            parts = cmd.split()
-            steps = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1
-            for _ in range(steps):
-                temp_pos = move_forward(pos, direction, 1)
+            if cmd.startswith("앞으로"):
+                # "앞으로 3" 또는 "앞으로 3칸" 모두 지원
+                parts = cmd.split()
+                steps = 1
+                if len(parts) > 1:
+                    num = parts[1]
+                    if num.endswith("칸"):
+                        num = num[:-1]
+                    if num.isdigit():
+                        steps = int(num)
+                for _ in range(steps):
+                    temp_pos = move_forward(pos, direction, 1)
+                    if temp_pos is None or temp_pos in s['obstacles']:
+                        s['result'] = '❌ 장애물 충돌 또는 벽 밖으로 벗어남'
+                        failed = True
+                        break
+                    pos = temp_pos
+
+            elif cmd == "왼쪽으로 이동":
+                left_dir = DIRECTIONS[(DIRECTIONS.index(direction) - 1) % 4]
+                temp_pos = move_forward(pos, left_dir, 1)
                 if temp_pos is None or temp_pos in s['obstacles']:
                     s['result'] = '❌ 장애물 충돌 또는 벽 밖으로 벗어남'
                     failed = True
                     break
                 pos = temp_pos
 
-        elif cmd == "왼쪽으로 이동":
-            left_dir = DIRECTIONS[(DIRECTIONS.index(direction) - 1) % 4]
-            temp_pos = move_forward(pos, left_dir, 1)
-            if temp_pos is None or temp_pos in s['obstacles']:
-                s['result'] = '❌ 장애물 충돌 또는 벽 밖으로 벗어남'
-                failed = True
-                break
-            pos = temp_pos
+            elif cmd == "오른쪽으로 이동":
+                right_dir = DIRECTIONS[(DIRECTIONS.index(direction) + 1) % 4]
+                temp_pos = move_forward(pos, right_dir, 1)
+                if temp_pos is None or temp_pos in s['obstacles']:
+                    s['result'] = '❌ 장애물 충돌 또는 벽 밖으로 벗어남'
+                    failed = True
+                    break
+                pos = temp_pos
 
-        elif cmd == "오른쪽으로 이동":
-            right_dir = DIRECTIONS[(DIRECTIONS.index(direction) + 1) % 4]
-            temp_pos = move_forward(pos, right_dir, 1)
-            if temp_pos is None or temp_pos in s['obstacles']:
-                s['result'] = '❌ 장애물 충돌 또는 벽 밖으로 벗어남'
-                failed = True
-                break
-            pos = temp_pos
+            elif cmd == "뒤로 이동":
+                back_dir = DIRECTIONS[(DIRECTIONS.index(direction) + 2) % 4]
+                temp_pos = move_forward(pos, back_dir, 1)
+                if temp_pos is None or temp_pos in s['obstacles']:
+                    s['result'] = '❌ 장애물 충돌 또는 벽 밖으로 벗어남'
+                    failed = True
+                    break
+                pos = temp_pos
 
-        elif cmd == "뒤로 이동":
-            back_dir = DIRECTIONS[(DIRECTIONS.index(direction) + 2) % 4]
-            temp_pos = move_forward(pos, back_dir, 1)
-            if temp_pos is None or temp_pos in s['obstacles']:
-                s['result'] = '❌ 장애물 충돌 또는 벽 밖으로 벗어남'
-                failed = True
-                break
-            pos = temp_pos
+            elif cmd in ("왼쪽 회전", "오른쪽 회전"):
+                direction = rotate(direction, cmd)
 
-        elif cmd == "왼쪽 회전" or cmd == "오른쪽 회전":
-            direction = rotate(direction, cmd)
+            elif cmd == "집기" and pos in s['goals']:
+                visited_goals.add(pos)
 
-        elif cmd == "집기" and pos in s['goals']:
-            visited_goals.add(pos)
-
-        if failed:
-            break
-
-        # 귀신 이동 및 충돌 체크
-        if ghost:
-            ghost = move_ghost(ghost, pos, s['obstacles'], ignore_obstacles=LEVELS[s['level']].get('ignore_obstacles', False))
-            ghost_path.append(ghost)
-            if pos == ghost:
-                s['result'] = '👻 귀신에게 잡힘!'
-                failed = True
+            if failed:
                 break
 
-        draw_grid(pos, direction, ghost, ghost_path, s['obstacles'], s['goals'], s['portals'])
-        time.sleep(0.3)
-
-        # 포탈 처리
-        if s['portals'] and pos in s['portals']:
-            dest = [p for p in s['portals'] if p != pos][0]
-            around = [(dest[0] + d[0], dest[1] + d[1]) for d in MOVE_OFFSET.values()]
-            random.shuffle(around)
-            for a in around:
-                if 0 <= a[0] < MAP_SIZE and 0 <= a[1] < MAP_SIZE and a not in s['obstacles']:
-                    pos = a
+            # 귀신
+            if ghost:
+                ghost = move_ghost(ghost, pos, s['obstacles'], ignore_obstacles=LEVELS[s['level']].get('ignore_obstacles', False))
+                ghost_path.append(ghost)
+                if pos == ghost:
+                    s['result'] = '👻 귀신에게 잡힘!'
+                    failed = True
                     break
 
-    # 결과/점수
-    if not failed:
-        score = len(visited_goals) * LEVELS[s['level']]['score']
-        s['score'] = score
-        s['total_score'] += score
-        s['high_score'] = max(s['high_score'], score)
-        s['result'] = f"🎯 목표 도달: {len(visited_goals)}개, 점수: {score}"
+            draw_grid(pos, direction, ghost, ghost_path, s['obstacles'], s['goals'], s['portals'])
+            time.sleep(0.2)
 
-        shortest = bfs_shortest_path(s['start'], s['goals'], s['obstacles'])
-        if shortest and len(command_list) == len(shortest) + 2 and len(visited_goals) == 2:
-            s['result'] += '\n🌟 Perfect!'
+            # 포탈
+            if s['portals'] and pos in s['portals']:
+                dest = [p for p in s['portals'] if p != pos][0]
+                around = [(dest[0] + d[0], dest[1] + d[1]) for d in MOVE_OFFSET.values()]
+                random.shuffle(around)
+                for a in around:
+                    if 0 <= a[0] < MAP_SIZE and 0 <= a[1] < MAP_SIZE and a not in s['obstacles']:
+                        pos = a
+                        break
 
-    s.update({
-        'position': pos,
-        'direction': direction,
-        'ghost': ghost,
-        'ghost_path': ghost_path,
-        'commands': command_list
-    })
-    st.session_state['command_input'] = '\n'.join(command_list)
+        if not failed:
+            score = len(visited_goals) * LEVELS[s['level']]['score']
+            s['score'] = score
+            s['total_score'] += score
+            s['high_score'] = max(s['high_score'], score)
+            s['result'] = f"🎯 목표 도달: {len(visited_goals)}개, 점수: {score}"
+
+            shortest = bfs_shortest_path(s['start'], s['goals'], s['obstacles'])
+            if shortest and len(command_list) == len(shortest) + 2 and len(visited_goals) == 2:
+                s['result'] += '\n🌟 Perfect!'
+
+        s.update({
+            'position': pos,
+            'direction': direction,
+            'ghost': ghost,
+            'ghost_path': ghost_path,
+            'commands': command_list
+        })
+        st.session_state['command_input'] = '\n'.join(command_list)
+
+    except Exception as e:
+        import traceback
+        st.error("예외가 발생했습니다. 아래 로그를 공유해 주세요.")
+        st.code(traceback.format_exc())
 
 # 상태 표시
 st.markdown(f"**현재 점수:** {st.session_state.state['score']} / **최고 점수:** {st.session_state.state['high_score']} / **누적 점수:** {st.session_state.state['total_score']}")
 st.markdown(f"**결과:** {st.session_state.state['result']}")
-
 draw_grid(
     st.session_state.state['position'],
     st.session_state.state['direction'],
@@ -297,9 +365,7 @@ draw_grid(
 if st.button("🔁 다시 시작"):
     level_info = LEVELS[st.session_state.state['level']]
     start, obstacles, goals, portals = generate_map(level_info['obstacles'], use_portals=level_info.get('portals', False))
-    ghost = None
-    if level_info['ghost']:
-        ghost = (min(MAP_SIZE - 1, start[0] + level_info['ghost_range']), start[1])
+    ghost = (min(MAP_SIZE - 1, start[0] + level_info['ghost_range']), start[1]) if level_info['ghost'] else None
     st.session_state.state.update({
         'start': start,
         'position': start,
@@ -317,32 +383,27 @@ if st.button("🔁 다시 시작"):
 # 설명
 with st.expander("📘 게임 설명 보기"):
     st.markdown("""
-    ### 🎮 게임 방법
-    로봇 🤡에게 명령어를 입력하여 두 개의 🎯 목표 지점에 도달하고 집기 명령으로 수집하세요!  
-    장애물(⬛)을 피하고, 귀신(👻)에게 잡히지 않도록 조심하세요!
-
-    ### ✏️ 사용 가능한 명령어
-    - 앞으로 / 앞으로 2 / 앞으로 3
-    - 왼쪽 회전 / 오른쪽 회전
-    - 왼쪽으로 이동 / 오른쪽으로 이동 / 뒤로 이동
-    - 집기
-
-    ### 🌀 포탈
-    - 포탈(🌀)에 들어가면 다른 포탈 근처 랜덤 위치로 순간 이동 (귀신은 사용 불가)
-
-    ### 🏆 Perfect 판정
-    - 최단 경로 + 모든 목표 수집 + 명령 수 최소일 때 Perfect! 🌟
+    - `앞으로`, `앞으로 2`, `앞으로 3칸` 등 전진
+    - `왼쪽 회전` / `오른쪽 회전` (방향만 전환)
+    - `왼쪽으로 이동` / `오른쪽으로 이동` / `뒤로 이동` (현재 바라보는 방향 기준 상대 이동)
+    - `집기` (현재 칸이 🎯일 때)
     """)
 
-# (선택) 자동완성: 텍스트박스는 이미 위에서 한 번만 생성했으므로, 아래는 추가만 처리
-auto_options = ["앞으로", "앞으로 2", "앞으로 3", "왼쪽 회전", "오른쪽 회전", "왼쪽으로 이동", "오른쪽으로 이동", "뒤로 이동", "집기"]
-col1, col2 = st.columns([2,1])
-with col1:
-    selected_command = st.selectbox("자동완성 명령어 선택", auto_options, index=0)
-with col2:
-    if st.button("➕ 명령어 추가"):
-        current = st.session_state.get("command_input", "")
-        new_value = (current + ("\n" if current else "") + selected_command).strip()
-        st.session_state["command_input"] = new_value
-        st.experimental_rerun()
-
+# AI 힌트 (선택)
+if st.button("🧠 AI 힌트 보기 (-30점)"):
+    s = st.session_state.state
+    if s['total_score'] < 30:
+        st.warning("포인트가 부족합니다! (30점 필요)")
+    else:
+        path = None
+        for g in s['goals']:
+            p = bfs_shortest_path(s['position'], [g], s['obstacles'])
+            if p:
+                path = p
+                break
+        if not path:
+            st.error("경로를 찾을 수 없습니다.")
+        else:
+            s['total_score'] -= 30
+            hint = path_to_commands([s['position']] + path, s['direction'])
+            st.info("**AI 추천 명령어**\n\n" + "\n".join(hint))
