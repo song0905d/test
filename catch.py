@@ -166,11 +166,18 @@ if selected_level != st.session_state.state['level']:
     })
     st.session_state["command_input"] = ""  # ✅ 명확하게 초기화
 
-input_text = st.text_area("명령어 입력(한줄에 명령어 하나씩)", value=st.session_state.get("command_input", ""))
+
+# 명령어 입력창
+input_text = st.text_area("명령어 입력", value=st.session_state.get("command_input", ""), key="command_input")
+
+# 입력 보정
+corrected_lines = []
+for line in input_text.strip().split('\n'):
+    corrected_lines.append("앞으로" if line.strip() == "앞" else line.strip())
+input_text = "\n".join(corrected_lines)
 command_list = input_text.strip().split('\n')
 
-
-
+# 명령 실행
 if st.button("실행"):
     s = st.session_state.state
     pos = s['position']
@@ -192,33 +199,31 @@ if st.button("실행"):
                 pos = temp_pos
 
         elif cmd == "뒤로 이동":
-            back_pos = move_forward(pos, 'DOWN', 1)
-            if back_pos is None or back_pos in s['obstacles']:
+            temp_pos = move_forward(pos, 'DOWN', 1)
+            if temp_pos is None or temp_pos in s['obstacles']:
                 s['result'] = '❌ 장애물 충돌 또는 벽 밖으로 벗어남'
                 failed = True
                 break
-            pos = back_pos
+            pos = temp_pos
 
         elif "회전" in cmd:
             direction = rotate(direction, cmd)
-        
-
 
         elif cmd == "왼쪽으로 이동":
-            left_pos = move_forward(pos, 'LEFT', 1)
-            if left_pos is None or left_pos in s['obstacles']:
+            temp_pos = move_forward(pos, 'LEFT', 1)
+            if temp_pos is None or temp_pos in s['obstacles']:
                 s['result'] = '❌ 장애물 충돌 또는 벽 밖으로 벗어남'
                 failed = True
                 break
-            pos = left_pos
+            pos = temp_pos
 
         elif cmd == "오른쪽으로 이동":
-            right_pos = move_forward(pos, 'RIGHT', 1)
-            if right_pos is None or right_pos in s['obstacles']:
+            temp_pos = move_forward(pos, 'RIGHT', 1)
+            if temp_pos is None or temp_pos in s['obstacles']:
                 s['result'] = '❌ 장애물 충돌 또는 벽 밖으로 벗어남'
                 failed = True
                 break
-            pos = right_pos
+            pos = temp_pos
 
         elif cmd == "집기" and pos in s['goals']:
             visited_goals.add(pos)
