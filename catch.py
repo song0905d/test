@@ -168,7 +168,6 @@ if selected_level != st.session_state.state['level']:
 
 commands = st.text_area("명령어 입력(한줄에 명령어 하나씩)", value=st.session_state.get('command_input', ''))
 
-commands = st.session_state.get("command_input", "")
 
 
 if st.button("실행"):
@@ -196,13 +195,7 @@ if st.button("실행"):
         elif "회전" in cmd:
             direction = rotate(direction, cmd)
         
-        elif cmd == "뒤로 이동":
-            back_pos = move_forward(pos, 'DOWN', 1)
-            if back_pos is None or back_pos in s['obstacles']:
-                s['result'] = '❌ 장애물 충돌 또는 벽 밖으로 벗어남'
-                failed = True
-                break
-            pos = back_pos
+
 
         elif cmd == "왼쪽으로 이동":
             left_pos = move_forward(pos, 'LEFT', 1)
