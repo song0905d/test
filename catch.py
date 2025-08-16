@@ -179,7 +179,7 @@ if st.button("실행"):
     visited_goals = set()
     failed = False
 
-       for cmd in command_list:
+     for cmd in command_list:
         if cmd.startswith("앞으로"):
             steps = int(cmd.split()[1]) if len(cmd.split()) > 1 else 1
             for _ in range(steps):
