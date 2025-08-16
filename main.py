@@ -212,6 +212,16 @@ if selected_level != st.session_state.state['level']:
     })
     st.session_state["command_input"] = ""
 
+# --------------------- 여기서부터 위젯 생성 전에 수정 처리 --------------------- #
+if st.session_state.pop('_clear_input', False):
+    st.session_state['command_input'] = ""
+
+if '_append' in st.session_state:
+    cur = st.session_state.get('command_input', '')
+    add = st.session_state.pop('_append')
+    st.session_state['command_input'] = (cur + ('\n' if cur else '') + add)
+# ----------------------------------------------------------------------------- #
+
 # 입력창 (한 번만)
 input_text = st.text_area(
     "명령어 입력(한 줄에 하나씩)",
@@ -236,8 +246,7 @@ with c1:
     chosen = st.selectbox("자동완성 명령어 선택", auto_options, index=0)
 with c2:
     if st.button("➕ 추가"):
-        cur = st.session_state.get("command_input", "")
-        st.session_state["command_input"] = (cur + ("\n" if cur else "") + chosen)
+        st.session_state['_append'] = chosen   # ← 플래그만 설정
         _rerun()
 
 # 실행
@@ -350,7 +359,8 @@ if st.button("실행"):
             'ghost_path': ghost_path,
             'commands': command_list
         })
-        st.session_state['command_input'] = '\n'.join(command_list)
+        # ❌ 위젯 키 직접 수정 금지 → 다른 키로 저장
+        st.session_state['last_run_commands'] = '\n'.join(command_list)
 
     except Exception:
         st.error("예외가 발생했습니다. 아래 로그를 확인하세요.")
@@ -386,7 +396,8 @@ if st.button("🔁 다시 시작"):
         'result': '',
         'commands': []
     })
-    st.session_state['command_input'] = ""
+    # 입력창은 플래그로 비우고 rerun에서 적용
+    st.session_state['_clear_input'] = True
     _rerun()
 
 # 설명
