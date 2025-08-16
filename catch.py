@@ -166,7 +166,7 @@ if selected_level != st.session_state.state['level']:
     })
     st.session_state["command_input"] = ""  # ✅ 명확하게 초기화
 
-input_text = st.text_area("명령어 입력", value=st.session_state.get("command_input", ""), key="command_input")
+input_text = st.text_area("명령어 입력(한줄에 명령어 하나씩)", value=st.session_state.get("command_input", ""), key="command_input")
 command_list = input_text.strip().split('\n')
 
 
@@ -361,15 +361,16 @@ commands = st.text_area("명령어 입력(한줄에 명령어 하나씩)",
                         value=st.session_state.get("command_input", ""),
                         key="command_input")
 
-# 입력 보정: "앞" → "앞으로"
 corrected_lines = []
-for line in commands.strip().split('\n'):
+for line in input_text.strip().split('\n'):
     stripped = line.strip()
     if stripped == "앞":
         corrected_lines.append("앞으로")
     else:
         corrected_lines.append(stripped)
-commands = "\n".join(corrected_lines)
+input_text = "\n".join(corrected_lines)
+command_list = input_text.strip().split('\n')  # 다시 업데이트
+
 
 
 
