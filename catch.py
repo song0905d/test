@@ -104,6 +104,8 @@ def draw_grid(position, direction, ghost, ghost_path, obstacles, goals, portals)
         grid += '\n'
     st.text(grid)
 
+
+# ... 상단에 있는 import 문 아래 또는 함수 정의들 아래
 def parse_command(command):
     if command.startswith("앞으로 ") and "칸" in command:
         try:
@@ -113,18 +115,6 @@ def parse_command(command):
             return [command]
     return [command]
 
-if cmd.startswith("앞으로"):
-    parts = cmd.strip().split()
-    steps = int(parts[1].replace("칸", "")) if len(parts) > 1 else 1
-    dx, dy = MOVE_OFFSET[direction]
-    for _ in range(steps):
-        next_x = player_x + dx
-        next_y = player_y + dy
-        if is_valid_move(next_x, next_y):
-            player_x, player_y = next_x, next_y
-            path.append((player_x, player_y, direction))
-        else:
-            break
 
 
 # ----------------------------- 실행 ----------------------------- #
@@ -213,6 +203,12 @@ if st.button("실행"):
         elif cmd == "집기" and pos in s['goals']:
             visited_goals.add(pos)
 
+raw_commands = commands.strip().split('\n')
+command_list = []
+for line in raw_commands:
+    command_list.extend(parse_command(line.strip()))
+
+     
         if failed:
             break
 
