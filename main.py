@@ -157,6 +157,8 @@ def _rerun():
 # ----------------------------- 앱 ----------------------------- #
 st.title("🤖 로봇 명령 퍼즐")
 
+st.markdown( """ <audio autoplay loop> <source src="https://www.bensound.com/bensound-music/bensound-littleidea.mp3" type="audio/mpeg"> </audio> """, unsafe_allow_html=True )
+
 # 초기 상태
 if 'state' not in st.session_state:
     default_level = list(LEVELS.keys())[0]
