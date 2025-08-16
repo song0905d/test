@@ -39,9 +39,13 @@ def generate_map(obstacle_count, goal_count=2, use_portals=False):
 
     return start, obstacles, goals, portals
 
-def rotate(direction, turn):
-    idx = DIRECTIONS.index(direction)
-    return DIRECTIONS[(idx + 1) % 4] if turn == '오른쪽 회전' else DIRECTIONS[(idx - 1) % 4]
+def rotate(current_direction, rotation_command):
+    idx = DIRECTIONS.index(current_direction)
+    if rotation_command == "오른쪽 회전":
+        return DIRECTIONS[(idx + 1) % 4]
+    elif rotation_command == "왼쪽 회전":
+        return DIRECTIONS[(idx - 1) % 4]
+    return current_direction
 
 def move_forward(pos, direction, steps):
     for _ in range(steps):
@@ -272,8 +276,8 @@ with st.expander("📘 게임 설명 보기"):
     - 편의를 위한 자동완성 명령어 기능 존재
     - 앞으로 : 한 칸 전진
     - 앞으로 2, 앞으로 3 : 여러 칸 전진
-    - 왼쪽 회전 : 반시계 방향으로 90도 회전
-    - 오른쪽 회전 : 시계 방향으로 90도 회전
+    - 왼쪽으로 이동 : 왼쪽 방향으로 1칸 이동
+    - 오른쪽으로 이동 : 오른쪽 방향으로 1칸 이동
     - 집기 : 현재 칸에 목표물이 있을 경우 수집
 
     ### 🌀 포탈
@@ -349,22 +353,49 @@ def path_to_commands(path, initial_direction='UP'):
                 target_dir = dir_name
                 break
 
-        # 방향 회전 처리
+def path_to_commands(path, initial_direction='UP'):
+    commands = []
+    direction = initial_direction
+
+    for i in range(1, len(path)):
+        cur = path[i - 1]
+        nxt = path[i]
+        dx, dy = nxt[0] - cur[0], nxt[1] - cur[1]
+
+        for dir_name, (dx_offset, dy_offset) in MOVE_OFFSET.items():
+            if (dx, dy) == (dx_offset, dy_offset):
+                target_dir = dir_name
+                break
+
+        rotate_cmds = []
+        orig_direction = direction  # 현재 바라보는 방향 저장
+
         while direction != target_dir:
             cur_idx = DIRECTIONS.index(direction)
             target_idx = DIRECTIONS.index(target_dir)
             if (target_idx - cur_idx) % 4 == 1:
-                commands.append("오른쪽 회전")
+                rotate_cmds.append("오른쪽으로 이동")
                 direction = rotate(direction, "오른쪽 회전")
             else:
-                commands.append("왼쪽 회전")
+                rotate_cmds.append("왼쪽으로 이동")
                 direction = rotate(direction, "왼쪽 회전")
 
+        commands.extend(rotate_cmds)
         commands.append("앞으로")
+
+        # 방향 복원
+        while direction != orig_direction:
+            cur_idx = DIRECTIONS.index(direction)
+            orig_idx = DIRECTIONS.index(orig_direction)
+            if (orig_idx - cur_idx) % 4 == 1:
+                commands.append("오른쪽으로 이동")
+                direction = rotate(direction, "오른쪽 회전")
+            else:
+                commands.append("왼쪽으로 이동")
+                direction = rotate(direction, "왼쪽 회전")
 
     commands.append("집기")
     return commands
-
 # AI 힌트 버튼 처리
 if st.button("\U0001f9e0 AI 힌트 보기 (-30점)"):
     s = st.session_state.state
