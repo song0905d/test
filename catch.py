@@ -178,6 +178,13 @@ if selected_level != st.session_state.state['level']:
 
 commands = st.text_area("명령어 입력(한줄에 명령어 하나씩)", value=st.session_state.get('command_input', ''))
 
+
+raw_commands = commands.strip().split('\n')
+command_list = []
+for line in raw_commands:
+    command_list.extend(parse_command(line.strip()))
+
+
 if st.button("실행"):
     s = st.session_state.state
     pos = s['position']
@@ -202,12 +209,6 @@ if st.button("실행"):
             direction = rotate(direction, cmd)
         elif cmd == "집기" and pos in s['goals']:
             visited_goals.add(pos)
-
-raw_commands = commands.strip().split('\n')
-command_list = []
-for line in raw_commands:
-    command_list.extend(parse_command(line.strip()))
-
      
         if failed:
             break
