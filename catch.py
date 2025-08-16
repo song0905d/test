@@ -166,8 +166,8 @@ if selected_level != st.session_state.state['level']:
     })
     st.session_state["command_input"] = ""  # ✅ 명확하게 초기화
 
-commands = st.text_area("명령어 입력(한줄에 하나씩)", value=st.session_state.get("command_input", ""), key="command_input")
-command_list = commands.strip().split('\n')
+input_text = st.text_area("명령어 입력", value=st.session_state.get("command_input", ""), key="command_input")
+command_list = input_text.strip().split('\n')
 
 
 
