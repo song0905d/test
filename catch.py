@@ -179,11 +179,11 @@ if st.button("실행"):
     visited_goals = set()
     failed = False
 
-  
- 
     for cmd in command_list:
+        cmd = cmd.strip()
+
         if cmd.startswith("앞으로"):
-            steps = int(cmd.split()[1]) if len(cmd.split()) > 1 else 1
+            steps = int(cmd.split()[1]) if len(cmd.split()) > 1 and cmd.split()[1].isdigit() else 1
             for _ in range(steps):
                 temp_pos = move_forward(pos, direction, 1)
                 if temp_pos is None or temp_pos in s['obstacles']:
@@ -191,26 +191,39 @@ if st.button("실행"):
                     failed = True
                     break
                 pos = temp_pos
-        elif "회전" in cmd:
-            direction = rotate(direction, cmd)
-            
-        elif cmd == "집기" and pos in s['goals']:
-            visited_goals.add(pos)
-             elif cmd == "왼쪽으로 이동":
-            left_pos = move_forward(pos, 'LEFT', 1)
-            if left_pos is None or left_pos in s['obstacles']:
+
+        elif cmd == "왼쪽으로 이동":
+            left_dir = DIRECTIONS[(DIRECTIONS.index(direction) - 1) % 4]
+            temp_pos = move_forward(pos, left_dir, 1)
+            if temp_pos is None or temp_pos in s['obstacles']:
                 s['result'] = '❌ 장애물 충돌 또는 벽 밖으로 벗어남'
                 failed = True
                 break
-            pos = left_pos
+            pos = temp_pos
 
         elif cmd == "오른쪽으로 이동":
-            right_pos = move_forward(pos, 'RIGHT', 1)
-            if right_pos is None or right_pos in s['obstacles']:
+            right_dir = DIRECTIONS[(DIRECTIONS.index(direction) + 1) % 4]
+            temp_pos = move_forward(pos, right_dir, 1)
+            if temp_pos is None or temp_pos in s['obstacles']:
                 s['result'] = '❌ 장애물 충돌 또는 벽 밖으로 벗어남'
                 failed = True
                 break
-            pos = right_pos
+            pos = temp_pos
+
+        elif cmd == "뒤로 이동":
+            back_dir = DIRECTIONS[(DIRECTIONS.index(direction) + 2) % 4]
+            temp_pos = move_forward(pos, back_dir, 1)
+            if temp_pos is None or temp_pos in s['obstacles']:
+                s['result'] = '❌ 장애물 충돌 또는 벽 밖으로 벗어남'
+                failed = True
+                break
+            pos = temp_pos
+
+        elif "회전" in cmd:
+            direction = rotate(direction, cmd)
+
+        elif cmd == "집기" and pos in s['goals']:
+            visited_goals.add(pos)
 
         if failed:
             break
