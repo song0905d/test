@@ -113,6 +113,19 @@ def parse_command(command):
             return [command]
     return [command]
 
+if cmd.startswith("앞으로"):
+    parts = cmd.strip().split()
+    steps = int(parts[1].replace("칸", "")) if len(parts) > 1 else 1
+    dx, dy = MOVE_OFFSET[direction]
+    for _ in range(steps):
+        next_x = player_x + dx
+        next_y = player_y + dy
+        if is_valid_move(next_x, next_y):
+            player_x, player_y = next_x, next_y
+            path.append((player_x, player_y, direction))
+        else:
+            break
+
 
 # ----------------------------- 실행 ----------------------------- #
 st.title("🤖 로봇 명령 퍼즐 게임")
@@ -255,11 +268,6 @@ draw_grid(
     st.session_state.state['goals'],
     st.session_state.state['portals']
 )
-
-all_commands = []
-for line in st.session_state["command_input"].splitlines():
-    all_commands.extend(parse_command(line.strip()))
-
 
 
 if st.button("🔁 다시 시작"):
