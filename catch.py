@@ -27,7 +27,6 @@ LEVEL_NAMES = list(LEVELS.keys())
 LEVEL_DIFFICULTY = {name: i + 1 for i, name in enumerate(LEVEL_NAMES)}  # 난이도 1~5
 
 # ----------------------------- DB ----------------------------- #
-@st.cache_resource
 def get_conn():
     conn = sqlite3.connect("robot_game_runs.db", check_same_thread=False)
     conn.execute(
@@ -49,7 +48,7 @@ def get_conn():
     return conn
 
 def log_run(conn, user_id, level, difficulty, commands, success, steps, optimal_steps):
-    """한 판 플레이 결과 기록"""
+    """한 판 결과 기록"""
     if not user_id:
         return
     cur = conn.cursor()
@@ -72,7 +71,7 @@ def log_run(conn, user_id, level, difficulty, commands, success, steps, optimal_
     conn.commit()
 
 def get_user_stats(conn, user_id, k=20):
-    """특정 사용자 최근 k판의 난이도/성공률 통계"""
+    """개인 최근 k판 기준 성공률 / 마지막 난이도"""
     if not user_id:
         return None
     cur = conn.cursor()
@@ -99,9 +98,9 @@ def get_user_stats(conn, user_id, k=20):
     }
 
 def recommend_level_name(stats):
-    """최근 성공률로 레벨 추천 (성공률 높으면 올리고, 낮으면 내림)"""
+    """개인 맞춤 레벨 추천"""
     if stats is None or stats["n"] < 5:
-        return LEVEL_NAMES[0]  # 데이터 부족 시 Level 1
+        return LEVEL_NAMES[0]  # 데이터 적으면 1레벨
     diff = stats["last_diff"]
     sr = stats["success_rate"]
     if sr > 0.8 and diff < 5:
@@ -250,10 +249,12 @@ def _rerun():
     except Exception:
         st.experimental_rerun()
 
-# ----------------------------- 앱 ----------------------------- #
+# ----------------------------- 앱 시작 ----------------------------- #
+conn = get_conn()
+
 st.title("🤖 로봇 명령 퍼즐 게임")
 
-# (선택) 배경 음악
+# 배경 음악
 st.markdown(
     """
     <audio autoplay loop>
@@ -263,9 +264,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-conn = get_conn()
-
-# 사용자 ID + 개인 통계
+# 사용자 ID + 통계
 user_id = st.text_input("사용자 ID (학번 또는 닉네임)", key="user_id")
 user_stats = get_user_stats(conn, user_id, k=20)
 
@@ -278,10 +277,10 @@ with c_info[2]:
     rec_level = recommend_level_name(user_stats) if user_stats else LEVEL_NAMES[0]
     st.metric("추천 레벨", rec_level)
 
-st.caption("추천 레벨은 최근 성공률 기반 개인 맞춤 난이도입니다. 필요하면 아래에서 직접 다른 레벨을 선택해도 됩니다.")
+st.caption("추천 레벨은 최근 성공률을 바탕으로 개인 맞춤으로 결정됩니다. 필요하면 아래에서 직접 다른 레벨을 선택해도 됩니다.")
 
-# 초기 상태
-if 'state' not in st.session_state:
+# 상태 초기화
+if "state" not in st.session_state:
     default_level = rec_level if user_stats else LEVEL_NAMES[0]
     level_info = LEVELS[default_level]
     start, obstacles, goals, portals = generate_map(level_info['obstacles'], use_portals=level_info.get('portals', False))
@@ -303,8 +302,11 @@ if 'state' not in st.session_state:
         'commands': []
     }
 
+# command_input 상태 변수 (위젯 key로 쓰지 않음)
+if "command_input" not in st.session_state:
+    st.session_state["command_input"] = ""
 
-# 레벨 선택 (현재 상태 기준 index 유지)
+# 레벨 선택
 current_level = st.session_state.state['level']
 selected_level = st.selectbox("레벨 선택", LEVEL_NAMES, index=LEVEL_NAMES.index(current_level))
 if selected_level != st.session_state.state['level']:
@@ -326,16 +328,13 @@ if selected_level != st.session_state.state['level']:
     })
     st.session_state["command_input"] = ""
 
-# --- command_input 초기값 세팅 ---
-if "command_input" not in st.session_state:
-    st.session_state["command_input"] = ""
-
-# 입력창
+# 입력창 (위젯에 key 안 줌, value로만 연결)
 input_text = st.text_area(
     "명령어 입력(한 줄에 하나씩)",
-    key="command_input"
+    value=st.session_state["command_input"]
 )
-
+# 사용자가 바꾼 값을 다시 상태에 반영
+st.session_state["command_input"] = input_text
 
 # 간단 보정 + 리스트화
 fixed = []
@@ -343,9 +342,9 @@ for line in input_text.strip().split('\n'):
     s = line.strip()
     if s == "앞":
         s = "앞으로"
-    fixed.append(s)
-input_text = "\n".join(fixed)
-command_list = [c for c in input_text.split('\n') if c.strip()]
+    if s:
+        fixed.append(s)
+command_list = fixed
 
 # 자동완성
 auto_options = ["앞으로", "앞으로 2", "앞으로 3", "왼쪽 회전", "오른쪽 회전", "왼쪽으로 이동", "오른쪽으로 이동", "뒤로 이동", "집기"]
@@ -355,10 +354,10 @@ with c1:
 with c2:
     if st.button("➕ 추가"):
         cur = st.session_state.get("command_input", "")
-        st.session_state["command_input"] = (cur + ("\n" if cur else "") + chosen)
+        st.session_state["command_input"] = cur + ("\n" if cur else "") + chosen
         _rerun()
 
-# 실행
+# 실행 버튼
 if st.button("실행"):
     try:
         s = st.session_state.state
@@ -437,6 +436,7 @@ if st.button("실행"):
                     failed = True
                     break
 
+            # 맵 그리기 + 딜레이
             draw_grid(pos, direction, ghost, ghost_path, s['obstacles'], s['goals'], s['portals'])
             time.sleep(0.2)
 
@@ -462,7 +462,7 @@ if st.button("실행"):
             if shortest and len(command_list) == len(shortest) + 2 and len(visited_goals) == 2:
                 s['result'] += '\n🌟 Perfect!'
 
-            # 성공 여부: 목표를 1개 이상 집었으면 성공으로 간주
+            # 목표 1개 이상 집으면 성공 판정
             success_flag = len(visited_goals) > 0
 
         s.update({
@@ -472,15 +472,14 @@ if st.button("실행"):
             'ghost_path': ghost_path,
             'commands': command_list
         })
-        st.session_state['command_input'] = '\n'.join(command_list)
 
-        # ---- 여기서 DB에 기록 ---- #
+        # 기록 저장용 steps / optimal_steps
         steps = len(command_list)
         optimal_steps = None
         try:
             shortest_for_log = bfs_shortest_path(s['start'], s['goals'], s['obstacles'])
             if shortest_for_log:
-                optimal_steps = len(shortest_for_log) + 2  # 집기 2번 포함했다고 가정
+                optimal_steps = len(shortest_for_log) + 2  # 집기 2번 포함 가정
         except Exception:
             optimal_steps = None
 
@@ -496,10 +495,10 @@ if st.button("실행"):
         )
 
     except Exception:
-        st.error("예외가 발생했습니다. 아래 로그를 확인하세요.")
+        st.error("실행 중 예외가 발생했습니다. 아래 로그를 확인하세요.")
         st.code(traceback.format_exc())
 
-# 상태 + 맵
+# 상태 + 맵 표시
 st.markdown(f"**현재 점수:** {st.session_state.state['score']} / **최고 점수:** {st.session_state.state['high_score']} / **누적 점수:** {st.session_state.state['total_score']}")
 st.markdown(f"**결과:** {st.session_state.state['result']}")
 draw_grid(
@@ -541,7 +540,7 @@ with st.expander("📘 게임 설명"):
 - `집기` (현재 칸이 🎯일 때)
 """)
 
-# AI 힌트(선택)
+# AI 힌트
 if st.button("🧠 AI 힌트 보기 (-30점)"):
     s = st.session_state.state
     if s['total_score'] < 30:
@@ -560,7 +559,7 @@ if st.button("🧠 AI 힌트 보기 (-30점)"):
             hint = path_to_commands([s['position']] + path, s['direction'])
             st.info("**AI 추천 명령어**\n\n" + "\n".join(hint))
 
-# ----------------------------- 기록 / 통계 보기 ----------------------------- #
+# ----------------------------- 기록 / 통계 ----------------------------- #
 st.markdown("---")
 st.subheader("📊 명령어 기록 / 통계")
 
@@ -597,8 +596,6 @@ else:
             st.metric("명령어 수 표준편차", f"{steps_std:.3f}")
         with c3:
             st.metric("성공률", f"{success_rate*100:.1f}%")
-
-        st.caption("이 평균과 표준편차를 이용해 정규분포를 가정하고, 정규분포표를 만드는 심화 탐구에 활용할 수 있습니다.")
 
         csv = filtered.to_csv(index=False).encode("utf-8-sig")
         st.download_button(
