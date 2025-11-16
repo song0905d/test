@@ -619,22 +619,22 @@ else:
             st.metric("성공률", f"{success_rate*100:.1f}%")
 
 
-import io  # 파일 맨 위 import 부분에 이미 있으면 또 안 써도 됨
+import io  # 파일 맨 위에 이미 있으면 또 쓸 필요 없음
 
-# CSV 다운로드용 안전한 버전
+# --- CSV 다운로드 (한셀 호환 버전) ---
 safe_df = filtered.copy()
 
-# 필요하면 명령어 열처럼 너무 긴 텍스트는 주석 풀고 제외해도 됨
-# safe_df = safe_df.drop(columns=["commands"], errors="ignore")
+# 한셀에서 문제를 일으키는 긴 텍스트/줄바꿈 열 제거
+safe_df = safe_df.drop(columns=["commands"], errors="ignore")
 
 buffer = io.StringIO()
 safe_df.to_csv(buffer, index=False)
-csv_bytes = buffer.getvalue().encode("utf-8-sig")  # BOM 포함 UTF-8
+csv_bytes = buffer.getvalue().encode("utf-8-sig")  # 한글용 BOM 포함 UTF-8
 
 st.download_button(
     label="현재 데이터 CSV 다운로드",
     data=csv_bytes,
     file_name="robot_game_runs.csv",
-    mime="text/csv; charset=utf-8",
+    mime="text/csv",
 )
 
