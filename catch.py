@@ -302,7 +302,7 @@ if 'state' not in st.session_state:
         'result': '',
         'commands': []
     }
-    st.session_state['command_input'] = ""
+
 
 # 레벨 선택 (현재 상태 기준 index 유지)
 current_level = st.session_state.state['level']
