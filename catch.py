@@ -624,18 +624,18 @@ import io  # 파일 맨 위에 이미 있으면 또 쓸 필요 없음
 # --- CSV 다운로드: 한셀 호환 버전 ---
 safe_df = filtered.copy()
 
-# 한셀에서 문제를 잘 일으키는 매우 긴 텍스트/줄바꿈이 있는 열 제거
+# 줄바꿈 많고 길어서 문제 잘 일으키는 commands 열 제거
 safe_df = safe_df.drop(columns=["commands"], errors="ignore")
 
-# cp949(윈도우 한글) 인코딩으로 저장
-buffer = io.BytesIO()
-safe_df.to_csv(buffer, index=False, encoding="cp949")
-buffer.seek(0)
+# 1) 판다스로 CSV 문자열 만들기 (인코딩 지정 X)
+csv_text = safe_df.to_csv(index=False)
+
+# 2) 우리가 직접 cp949로 인코딩해서 바이트로 변환
+csv_bytes = csv_text.encode("cp949", errors="ignore")
 
 st.download_button(
     label="현재 데이터 CSV 다운로드",
-    data=buffer,
+    data=csv_bytes,
     file_name="robot_game_runs.csv",
     mime="text/csv",
 )
-
