@@ -621,19 +621,20 @@ else:
 
 import io  # 파일 맨 위에 이미 있으면 또 쓸 필요 없음
 
-# --- CSV 다운로드 (한셀 호환 버전) ---
+# --- CSV 다운로드: 한셀 호환 버전 ---
 safe_df = filtered.copy()
 
-# 한셀에서 문제를 일으키는 긴 텍스트/줄바꿈 열 제거
+# 한셀에서 문제를 잘 일으키는 매우 긴 텍스트/줄바꿈이 있는 열 제거
 safe_df = safe_df.drop(columns=["commands"], errors="ignore")
 
-buffer = io.StringIO()
-safe_df.to_csv(buffer, index=False)
-csv_bytes = buffer.getvalue().encode("utf-8-sig")  # 한글용 BOM 포함 UTF-8
+# cp949(윈도우 한글) 인코딩으로 저장
+buffer = io.BytesIO()
+safe_df.to_csv(buffer, index=False, encoding="cp949")
+buffer.seek(0)
 
 st.download_button(
     label="현재 데이터 CSV 다운로드",
-    data=csv_bytes,
+    data=buffer,
     file_name="robot_game_runs.csv",
     mime="text/csv",
 )
