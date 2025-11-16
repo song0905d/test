@@ -618,10 +618,17 @@ else:
         with c3:
             st.metric("성공률", f"{success_rate*100:.1f}%")
 
-        csv = filtered.to_csv(index=False).encode("utf-8-sig")
-        st.download_button(
-            label="현재 데이터 CSV 다운로드",
-            data=csv,
-            file_name="robot_game_runs.csv",
-            mime="text/csv",
-        )
+        # 엑셀에서 깨지지 않게 안전하게 변환
+safe_df = filtered.copy()
+
+# 불필요하게 길거나 깨질 수 있는 열이 있으면 여기서 정리해도 됨
+# 예: safe_df = safe_df.drop(columns=["commands"], errors="ignore")
+
+csv_data = safe_df.to_csv(index=False)  # 인코딩은 Streamlit이 처리하게 둠
+
+st.download_button(
+    label="현재 데이터 CSV 다운로드",
+    data=csv_data,
+    file_name="robot_game_runs.csv",
+    mime="text/csv",
+)
