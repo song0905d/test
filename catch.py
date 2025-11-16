@@ -618,17 +618,23 @@ else:
         with c3:
             st.metric("성공률", f"{success_rate*100:.1f}%")
 
-        # 엑셀에서 깨지지 않게 안전하게 변환
+
+import io  # 파일 맨 위 import 부분에 이미 있으면 또 안 써도 됨
+
+# CSV 다운로드용 안전한 버전
 safe_df = filtered.copy()
 
-# 불필요하게 길거나 깨질 수 있는 열이 있으면 여기서 정리해도 됨
-# 예: safe_df = safe_df.drop(columns=["commands"], errors="ignore")
+# 필요하면 명령어 열처럼 너무 긴 텍스트는 주석 풀고 제외해도 됨
+# safe_df = safe_df.drop(columns=["commands"], errors="ignore")
 
-csv_data = safe_df.to_csv(index=False)  # 인코딩은 Streamlit이 처리하게 둠
+buffer = io.StringIO()
+safe_df.to_csv(buffer, index=False)
+csv_bytes = buffer.getvalue().encode("utf-8-sig")  # BOM 포함 UTF-8
 
 st.download_button(
     label="현재 데이터 CSV 다운로드",
-    data=csv_data,
+    data=csv_bytes,
     file_name="robot_game_runs.csv",
-    mime="text/csv",
+    mime="text/csv; charset=utf-8",
 )
+
