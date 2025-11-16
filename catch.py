@@ -347,7 +347,7 @@ for line in input_text.strip().split('\n'):
 command_list = fixed
 
 # 자동완성
-auto_options = ["앞으로", "앞으로 2", "앞으로 3", "왼쪽 회전", "오른쪽 회전", "왼쪽으로 이동", "오른쪽으로 이동", "뒤로 이동", "집기"]
+auto_options = ["앞으로", "앞으로 2", "앞으로 3", "왼쪽으로 이동", "오른쪽으로 이동", "뒤로 이동", "집기"]
 c1, c2 = st.columns([2, 1])
 with c1:
     chosen = st.selectbox("자동완성 명령어 선택", auto_options, index=0)
@@ -535,7 +535,6 @@ if st.button("🔁 다시 시작"):
 with st.expander("📘 게임 설명"):
     st.markdown("""
 - `앞으로`, `앞으로 2`, `앞으로 3칸` 등 전진
-- `왼쪽 회전` / `오른쪽 회전` (방향만 회전)
 - `왼쪽으로 이동` / `오른쪽으로 이동` / `뒤로 이동` (현재 바라보는 방향 기준 상대 이동)
 - `집기` (현재 칸이 🎯일 때)
 """)
