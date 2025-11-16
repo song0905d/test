@@ -14,7 +14,7 @@ import sqlite3
 
 conn = sqlite3.connect("robot_game_runs.db")
 cur = conn.cursor()
-cur.execute("DELETE FROM runs WHERE user_id = ?", ("최동혁 사라져",))
+cur.execute("DELETE FROM runs WHERE user_id = ?", ("ㅏ",))
 conn.commit()
 conn.close()
 
