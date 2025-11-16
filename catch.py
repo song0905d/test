@@ -326,12 +326,16 @@ if selected_level != st.session_state.state['level']:
     })
     st.session_state["command_input"] = ""
 
-# 입력창 (한 번만)
+# --- command_input 초기값 세팅 ---
+if "command_input" not in st.session_state:
+    st.session_state["command_input"] = ""
+
+# 입력창
 input_text = st.text_area(
     "명령어 입력(한 줄에 하나씩)",
-    value=st.session_state.get('command_input', ''),
     key="command_input"
 )
+
 
 # 간단 보정 + 리스트화
 fixed = []
