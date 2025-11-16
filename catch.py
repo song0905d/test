@@ -4,6 +4,9 @@ import random
 import time
 import traceback
 from collections import deque
+import sqlite3
+import pandas as pd
+from datetime import datetime
 
 st.set_page_config(page_title="🤖 로봇 명령 퍼즐", page_icon="🤖", layout="centered")
 
@@ -19,6 +22,99 @@ LEVELS = {
 }
 MAP_SIZE = 9
 PORTAL_SYMBOL = '🌀'
+
+LEVEL_NAMES = list(LEVELS.keys())
+LEVEL_DIFFICULTY = {name: i + 1 for i, name in enumerate(LEVEL_NAMES)}  # 난이도 1~5
+
+# ----------------------------- DB ----------------------------- #
+@st.cache_resource
+def get_conn():
+    conn = sqlite3.connect("robot_game_runs.db", check_same_thread=False)
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT,
+            run_time TEXT,
+            level TEXT,
+            difficulty INTEGER,
+            commands TEXT,
+            success INTEGER,
+            steps INTEGER,
+            optimal_steps INTEGER
+        );
+        """
+    )
+    conn.commit()
+    return conn
+
+def log_run(conn, user_id, level, difficulty, commands, success, steps, optimal_steps):
+    """한 판 플레이 결과 기록"""
+    if not user_id:
+        return
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO runs (user_id, run_time, level, difficulty, commands, success, steps, optimal_steps)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            user_id,
+            datetime.now().isoformat(timespec="seconds"),
+            level,
+            difficulty,
+            commands,
+            int(success),
+            steps,
+            optimal_steps if optimal_steps is not None else None,
+        ),
+    )
+    conn.commit()
+
+def get_user_stats(conn, user_id, k=20):
+    """특정 사용자 최근 k판의 난이도/성공률 통계"""
+    if not user_id:
+        return None
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT difficulty, success
+        FROM runs
+        WHERE user_id = ?
+        ORDER BY run_time DESC
+        LIMIT ?
+        """,
+        (user_id, k),
+    )
+    rows = cur.fetchall()
+    if not rows:
+        return None
+    n = len(rows)
+    success_rate = sum(r[1] for r in rows) / n
+    last_diff = rows[0][0]
+    return {
+        "n": n,
+        "success_rate": success_rate,
+        "last_diff": last_diff,
+    }
+
+def recommend_level_name(stats):
+    """최근 성공률로 레벨 추천 (성공률 높으면 올리고, 낮으면 내림)"""
+    if stats is None or stats["n"] < 5:
+        return LEVEL_NAMES[0]  # 데이터 부족 시 Level 1
+    diff = stats["last_diff"]
+    sr = stats["success_rate"]
+    if sr > 0.8 and diff < 5:
+        diff += 1
+    elif sr < 0.4 and diff > 1:
+        diff -= 1
+    return LEVEL_NAMES[diff - 1]
+
+def load_runs_df(conn):
+    return pd.read_sql_query(
+        "SELECT id, user_id, run_time, level, difficulty, success, steps, optimal_steps, commands FROM runs ORDER BY run_time DESC",
+        conn,
+    )
 
 # ----------------------------- 유틸/로직 ----------------------------- #
 def bfs_shortest_path(start, goals, obstacles):
@@ -167,9 +263,26 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+conn = get_conn()
+
+# 사용자 ID + 개인 통계
+user_id = st.text_input("사용자 ID (학번 또는 닉네임)", key="user_id")
+user_stats = get_user_stats(conn, user_id, k=20)
+
+c_info = st.columns(3)
+with c_info[0]:
+    st.metric("최근 기록 수", user_stats["n"] if user_stats else 0)
+with c_info[1]:
+    st.metric("최근 성공률", f"{user_stats['success_rate']*100:.1f}%" if user_stats else "-")
+with c_info[2]:
+    rec_level = recommend_level_name(user_stats) if user_stats else LEVEL_NAMES[0]
+    st.metric("추천 레벨", rec_level)
+
+st.caption("추천 레벨은 최근 성공률 기반 개인 맞춤 난이도입니다. 필요하면 아래에서 직접 다른 레벨을 선택해도 됩니다.")
+
 # 초기 상태
 if 'state' not in st.session_state:
-    default_level = list(LEVELS.keys())[0]
+    default_level = rec_level if user_stats else LEVEL_NAMES[0]
     level_info = LEVELS[default_level]
     start, obstacles, goals, portals = generate_map(level_info['obstacles'], use_portals=level_info.get('portals', False))
     ghost = (min(MAP_SIZE - 1, start[0] + level_info.get('ghost_range', 0)), start[1]) if level_info['ghost'] else None
@@ -191,8 +304,9 @@ if 'state' not in st.session_state:
     }
     st.session_state['command_input'] = ""
 
-# 레벨 선택
-selected_level = st.selectbox("레벨 선택", list(LEVELS.keys()))
+# 레벨 선택 (현재 상태 기준 index 유지)
+current_level = st.session_state.state['level']
+selected_level = st.selectbox("레벨 선택", LEVEL_NAMES, index=LEVEL_NAMES.index(current_level))
 if selected_level != st.session_state.state['level']:
     level_info = LEVELS[selected_level]
     start, obstacles, goals, portals = generate_map(level_info['obstacles'], use_portals=level_info.get('portals', False))
@@ -332,6 +446,7 @@ if st.button("실행"):
                         pos = a
                         break
 
+        success_flag = False
         if not failed:
             score = len(visited_goals) * LEVELS[s['level']]['score']
             s['score'] = score
@@ -343,6 +458,9 @@ if st.button("실행"):
             if shortest and len(command_list) == len(shortest) + 2 and len(visited_goals) == 2:
                 s['result'] += '\n🌟 Perfect!'
 
+            # 성공 여부: 목표를 1개 이상 집었으면 성공으로 간주
+            success_flag = len(visited_goals) > 0
+
         s.update({
             'position': pos,
             'direction': direction,
@@ -351,6 +469,27 @@ if st.button("실행"):
             'commands': command_list
         })
         st.session_state['command_input'] = '\n'.join(command_list)
+
+        # ---- 여기서 DB에 기록 ---- #
+        steps = len(command_list)
+        optimal_steps = None
+        try:
+            shortest_for_log = bfs_shortest_path(s['start'], s['goals'], s['obstacles'])
+            if shortest_for_log:
+                optimal_steps = len(shortest_for_log) + 2  # 집기 2번 포함했다고 가정
+        except Exception:
+            optimal_steps = None
+
+        log_run(
+            conn=conn,
+            user_id=user_id,
+            level=s['level'],
+            difficulty=LEVEL_DIFFICULTY[s['level']],
+            commands='\n'.join(command_list),
+            success=success_flag,
+            steps=steps,
+            optimal_steps=optimal_steps,
+        )
 
     except Exception:
         st.error("예외가 발생했습니다. 아래 로그를 확인하세요.")
@@ -416,3 +555,51 @@ if st.button("🧠 AI 힌트 보기 (-30점)"):
             s['total_score'] -= 30
             hint = path_to_commands([s['position']] + path, s['direction'])
             st.info("**AI 추천 명령어**\n\n" + "\n".join(hint))
+
+# ----------------------------- 기록 / 통계 보기 ----------------------------- #
+st.markdown("---")
+st.subheader("📊 명령어 기록 / 통계")
+
+df = load_runs_df(conn)
+if df.empty:
+    st.info("아직 저장된 기록이 없습니다. 먼저 게임을 플레이해 주세요.")
+else:
+    user_options = ["전체"] + sorted([u for u in df["user_id"].dropna().unique().tolist() if u])
+    selected_user = st.selectbox("사용자 선택", user_options, key="log_user")
+    level_options = ["전체"] + LEVEL_NAMES
+    selected_level_for_log = st.selectbox("레벨 선택", level_options, key="log_level")
+
+    filtered = df.copy()
+    if selected_user != "전체":
+        filtered = filtered[filtered["user_id"] == selected_user]
+    if selected_level_for_log != "전체":
+        filtered = filtered[filtered["level"] == selected_level_for_log]
+
+    st.dataframe(
+        filtered[["id", "user_id", "run_time", "level", "difficulty", "success", "steps", "optimal_steps", "commands"]],
+        use_container_width=True,
+        height=300,
+    )
+
+    if not filtered.empty:
+        steps_mean = filtered["steps"].mean()
+        steps_std = filtered["steps"].std(ddof=1) if len(filtered) > 1 else 0.0
+        success_rate = filtered["success"].mean()
+
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.metric("명령어 수 평균", f"{steps_mean:.3f}")
+        with c2:
+            st.metric("명령어 수 표준편차", f"{steps_std:.3f}")
+        with c3:
+            st.metric("성공률", f"{success_rate*100:.1f}%")
+
+        st.caption("이 평균과 표준편차를 이용해 정규분포를 가정하고, 정규분포표를 만드는 심화 탐구에 활용할 수 있습니다.")
+
+        csv = filtered.to_csv(index=False).encode("utf-8-sig")
+        st.download_button(
+            label="현재 데이터 CSV 다운로드",
+            data=csv,
+            file_name="robot_game_runs.csv",
+            mime="text/csv",
+        )
