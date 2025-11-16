@@ -10,6 +10,17 @@ from datetime import datetime
 
 st.set_page_config(page_title="🤖 로봇 명령 퍼즐", page_icon="🤖", layout="centered")
 
+# (선택) 배경 음악 – 자동 재생은 브라우저에서 막힐 수 있어서 controls 추가
+bgm_html = """
+<audio controls loop>
+  <source src="https://www.bensound.com/bensound-music/bensound-littleidea.mp3" type="audio/mpeg">
+  브라우저가 audio 태그를 지원하지 않습니다.
+</audio>
+"""
+
+st.markdown(bgm_html, unsafe_allow_html=True)
+
+
 # ----------------------------- 설정 ----------------------------- #
 DIRECTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT']
 MOVE_OFFSET = {'UP': (-1, 0), 'DOWN': (1, 0), 'LEFT': (0, -1), 'RIGHT': (0, 1)}
