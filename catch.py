@@ -12,11 +12,7 @@ st.set_page_config(page_title="🤖 로봇 명령 퍼즐", page_icon="🤖", lay
 
 import sqlite3
 
-conn = sqlite3.connect("robot_game_runs.db")
-cur = conn.cursor()
-cur.execute("DELETE FROM runs WHERE user_id = "?", (".",))
-conn.commit()
-conn.close()
+
 
 
 # (선택) 배경 음악 – 자동 재생은 브라우저에서 막힐 수 있어서 controls 추가
