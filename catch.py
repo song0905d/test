@@ -617,6 +617,11 @@ else:
 
 import io  # 파일 맨 위에 이미 있으면 또 쓸 필요 없음
 
+# filtered가 존재하지 않는 경우 대비 (기본값)
+if 'filtered' not in locals():
+    filtered = df.copy()
+
+
 # --- CSV 다운로드: 한셀 호환 버전 ---
 safe_df = filtered.copy()
 
